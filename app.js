@@ -1,3 +1,12 @@
+async function loadProfile() {
+    const res = await fetch(
+        https://herobrr1n.github.io/card-market/ profile?userId=${userId}&username=${username}
+    );
+    const data = await res.json();
+
+    document.getElementById('username').innerText = data.username;
+    document.getElementById('balance').innerText = ${data.heriki} хериков;
+}
 const tg = window.Telegram.WebApp;
 tg.expand();
 
@@ -117,3 +126,7 @@ async function createListing(userCardId, price) {
 
 // Загружаем маркет при старте
 loadMarket();
+alert("Куплено!");
+loadProfile();
+loadMarket();
+

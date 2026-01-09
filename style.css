@@ -1,0 +1,75 @@
+/* Общий фон */
+body {
+    margin: 0;
+    padding: 16px;
+    font-family: Arial, sans-serif;
+    background: #0f172a;
+    color: #e5e7eb;
+}
+
+/* Заголовки */
+h1, h2 {
+    text-align: center;
+    margin-bottom: 12px;
+}
+
+/* Кнопки */
+button {
+    background: #6366f1;
+    color: white;
+    border: none;
+    padding: 10px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+button:hover {
+    background: #4f46e5;
+}
+
+/* Контейнеры */
+#cards, #market {
+    margin-top: 16px;
+}
+
+/* Карточка */
+.card {
+    background: #1e293b;
+    border-radius: 10px;
+    padding: 12px;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* Название карты */
+.card-name {
+    font-weight: bold;
+}
+
+/* Цена */
+.price {
+    color: #22c55e;
+    font-weight: bold;
+}
+.profile {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #020617;
+    padding: 12px 16px;
+    border-radius: 12px;
+    margin-bottom: 16px;
+    font-size: 14px;
+}
+
+#username {
+    font-weight: bold;
+}
+
+#balance {
+    color: #22c55e;
+    font-weight: bold;
+}
