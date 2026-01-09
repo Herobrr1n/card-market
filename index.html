@@ -4,23 +4,32 @@
   <meta charset="UTF-8">
   <title>Card Market</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <!-- CSS должен быть в head -->
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <h1>Card Market</h1>
   <div id="profile" class="profile">
-  <span id="username"></span>
-  <span id="balance"></span>
-</div>
+    <span id="username"></span>
+    <span id="balance"></span>
+  </div>
+  
   <button id="openPack">Открыть пак</button>
+  
+  <!-- Элемент для анимации открытия -->
+  <div id="opening" style="display:none;text-align:center;margin:20px;">
+    <h2>Открываем пак...</h2>
+  </div>
+  
+  <!-- Карточки -->
+  <h2>Ваши карты</h2>
   <div id="cards" class="list"></div>
-
+  
+  <!-- Маркет -->
+  <h2>Маркет</h2>
+  <div id="market" class="list"></div>
+  
+  <!-- Только один script в конце -->
   <script src="app.js"></script>
 </body>
 </html>
-<h2>Маркет</h2>
-<div id="market" class="list"></div>
-<link rel="stylesheet" href="style.css">
-<div id="opening" style="display:none;text-align:center;margin:20px;">
-  <h2>Открываем пак...</h2>
-</div>
-<script src="app.js"></script>
