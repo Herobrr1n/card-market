@@ -12,9 +12,9 @@ function showCard(card) {
     back.innerText = '🂠';
 
     const front = document.createElement('div');
-    front.className = card-face card-front card ${card.rarity};
+    front.className = `card-face card-front card ${card.rarity}`;
 
-    const imgSrc = images/card${card.cardId}.png;
+    const imgSrc = `images/card${card.cardId}.png`;
 
     front.innerHTML = `
         <img src="${imgSrc}">
