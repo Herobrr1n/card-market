@@ -4,32 +4,50 @@
   <meta charset="UTF-8">
   <title>Card Market</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <!-- CSS должен быть в head -->
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <h1>Card Market</h1>
+  <h1>🎴 Card Market</h1>
+  
+  <!-- Профиль -->
   <div id="profile" class="profile">
-    <span id="username"></span>
-    <span id="balance"></span>
+    <span id="username">Загрузка...</span>
+    <span id="balance">0 хериков</span>
   </div>
   
-  <button id="openPack">Открыть пак</button>
-  
-  <!-- Элемент для анимации открытия -->
-  <div id="opening" style="display:none;text-align:center;margin:20px;">
-    <h2>Открываем пак...</h2>
+  <!-- Кнопка открытия пака -->
+  <div style="text-align: center; margin: 30px 0;">
+    <button id="openPack" style="padding: 15px 30px; font-size: 18px;">
+      🎁 Открыть пак
+    </button>
   </div>
   
-  <!-- Карточки -->
-  <h2>Ваши карты</h2>
-  <div id="cards" class="list"></div>
+  <!-- Анимация открытия -->
+  <div id="opening" style="display:none;text-align:center;margin:30px;padding:20px;background:#1e293b;border-radius:10px;">
+    <h2>✨ Открываем пак...</h2>
+    <div style="font-size: 64px; margin: 20px; animation: spin 1s infinite linear;">🔄</div>
+    <p>Пожалуйста, подождите</p>
+  </div>
+  
+  <!-- Полученные карты -->
+  <div id="cardsContainer" style="margin: 30px 0;">
+    <h2>📚 Ваши карты</h2>
+    <div id="cards" class="list"></div>
+  </div>
   
   <!-- Маркет -->
-  <h2>Маркет</h2>
-  <div id="market" class="list"></div>
+  <div id="marketContainer" style="margin: 30px 0;">
+    <h2>🏪 Маркет</h2>
+    <div id="market" class="list"></div>
+  </div>
   
-  <!-- Только один script в конце -->
   <script src="app.js"></script>
+  
+  <style>
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+  </style>
 </body>
 </html>
