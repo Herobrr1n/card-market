@@ -15,10 +15,21 @@
     <span id="balance">0 хериков</span>
   </div>
   
+  <!-- Кнопка для фарма хериков -->
+  <div style="text-align: center; margin: 20px 0; padding: 15px; background: rgba(99, 102, 241, 0.1); border-radius: 10px;">
+    <h3 style="margin: 0 0 10px 0;">Фарм хериков</h3>
+    <button id="farmHeriks" style="padding: 15px 30px; font-size: 24px; border-radius: 50%; width: 70px; height: 70px;">
+      🖕🏿
+    </button>
+    <div id="farmCounter" style="margin-top: 10px; font-size: 14px; color: #94a3b8;">
+      Нажмите для получения хериков
+    </div>
+  </div>
+  
   <!-- Кнопка открытия пака -->
   <div style="text-align: center; margin: 30px 0;">
     <button id="openPack" style="padding: 15px 30px; font-size: 18px;">
-      🎁 Открыть пак
+      🎁 Открыть пак (50 хериков)
     </button>
   </div>
   
@@ -71,6 +82,16 @@
       50% { transform: scale(1.1); }
     }
     
+    @keyframes bounce {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.2); }
+    }
+    
+    @keyframes coinEffect {
+      0% { transform: translateY(0) scale(1); opacity: 1; }
+      100% { transform: translateY(-50px) scale(0.5); opacity: 0; }
+    }
+    
     .card-image {
       width: 180px;
       height: 180px;
@@ -84,6 +105,15 @@
       animation: highlight 0.5s infinite;
       border-color: #f59e0b;
       box-shadow: 0 0 20px #f59e0b;
+    }
+    
+    .coin-popup {
+      position: absolute;
+      color: #f59e0b;
+      font-weight: bold;
+      font-size: 20px;
+      pointer-events: none;
+      animation: coinEffect 1s forwards;
     }
   </style>
 </body>

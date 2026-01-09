@@ -25,7 +25,7 @@ console.log('User:', { userId, username });
 const BACKEND_URL = 'http://localhost:3000';
 console.log('Backend URL:', BACKEND_URL);
 
-// Картинки для рулетки (убедитесь, что эти файлы есть в папке images)
+// Картинки для рулетки
 const CARD_IMAGES = [
     'card1.png', 'card2.png', 'card3.png', 'card4.png', 'card5.png',
     'card6.png', 'card7.png', 'card8.png', 'card9.png', 'card10.png'
@@ -33,7 +33,12 @@ const CARD_IMAGES = [
 
 // ========== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ==========
 let isOpeningPack = false;
-let myCards = []; // Массив для хранения карт пользователя
+let myCards = [];
+let totalClicks = 0;
+let heriksPerClick = 1;
+let farmBoost = 1;
+let lastClickTime = 0;
+const CLICK_COOLDOWN = 100; // 100ms между кликами
 
 // ========== ПРОФИЛЬ ==========
 async function loadProfile() {
@@ -52,20 +57,148 @@ async function loadProfile() {
         if (response.ok) {
             const data = await response.json();
             console.log('Profile data:', data);
-            document.getElementById('balance').textContent = `${data.heriki || data.balance || 100} хериков`;
+            updateBalanceDisplay(data.heriki || data.balance || 100);
             
             // Загружаем карты пользователя
             if (data.cards && Array.isArray(data.cards)) {
                 myCards = data.cards;
                 displayMyCards();
             }
+            
+            // Загружаем статистику фарма если есть
+            if (data.farmStats) {
+                totalClicks = data.farmStats.totalClicks || 0;
+                updateFarmCounter();
+            }
         } else {
-            console.warn('Profile endpoint failed, using default balance');
-            document.getElementById('balance').textContent = '100 хериков';
+            console.warn('Profile endpoint failed, using defaults');
+            updateBalanceDisplay(100);
         }
     } catch (error) {
         console.error('Profile load error:', error);
-        document.getElementById('balance').textContent = 'Ошибка загрузки';
+        updateBalanceDisplay('Ошибка загрузки');
+    }
+}
+
+// ========== ФУНКЦИИ ДЛЯ БАЛАНСА ==========
+function updateBalanceDisplay(balance) {
+    document.getElementById('balance').textContent = `${balance} хериков`;
+}
+
+function getCurrentBalance() {
+    const balanceText = document.getElementById('balance').textContent;
+    const match = balanceText.match(/(\d+)/);
+    return match ? parseInt(match[1]) : 0;
+}
+
+function updateBalance(amount) {
+    const currentBalance = getCurrentBalance();
+    const newBalance = Math.max(0, currentBalance + amount);
+    updateBalanceDisplay(newBalance);
+    
+    // Сохраняем на сервер если нужно
+    saveBalanceToServer(newBalance);
+    
+    return newBalance;
+}
+
+async function saveBalanceToServer(balance) {
+    try {
+        await fetch(`${BACKEND_URL}/update-balance`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({
+                userId,
+                balance,
+                totalClicks
+            })
+        });
+    } catch (error) {
+        console.warn('Не удалось сохранить баланс на сервер:', error);
+    }
+}
+
+// ========== ФАРМ ХЕРИКОВ ==========
+function initializeFarmButton() {
+    console.log('Initializing farm button...');
+    const farmBtn = document.getElementById('farmHeriks');
+    
+    if (!farmBtn) {
+        console.error('❌ Кнопка #farmHeriks не найдена!');
+        return;
+    }
+    
+    farmBtn.addEventListener('click', function(event) {
+        const now = Date.now();
+// Проверяем кд
+        if (now - lastClickTime < CLICK_COOLDOWN) {
+            return;
+        }
+        
+        lastClickTime = now;
+        
+        // Анимация кнопки
+        farmBtn.style.animation = 'bounce 0.3s';
+        setTimeout(() => {
+            farmBtn.style.animation = '';
+        }, 300);
+        
+        // Создаем эффект монетки
+        createCoinEffect(event);
+        
+        // Добавляем херики
+        const earned = heriksPerClick * farmBoost;
+        const newBalance = updateBalance(earned);
+        
+        // Обновляем статистику
+        totalClicks++;
+        updateFarmCounter();
+        
+        // Сохраняем статистику
+        saveFarmStats();
+        
+        console.log(`💰 Получено ${earned} хериков. Всего: ${newBalance}`);
+    });
+    
+    console.log('✅ Кнопка фарма инициализирована');
+}
+
+function createCoinEffect(event) {
+    const coin = document.createElement('div');
+    coin.className = 'coin-popup';
+    coin.textContent = `+${heriksPerClick * farmBoost} 💰`;
+    coin.style.left = (event.clientX - 20) + 'px';
+    coin.style.top = (event.clientY - 20) + 'px';
+    
+    document.body.appendChild(coin);
+    
+    setTimeout(() => {
+        coin.remove();
+    }, 1000);
+}
+
+function updateFarmCounter() {
+    const farmCounter = document.getElementById('farmCounter');
+    if (farmCounter) {
+        farmCounter.innerHTML = `
+            <div>Всего кликов: <b>${totalClicks}</b></div>
+            <div>Хериков за клик: <b>${heriksPerClick * farmBoost}</b></div>
+            <div style="font-size: 12px; color: #6366f1;">Буст: x${farmBoost}</div>
+        `;
+    }
+}
+
+function saveFarmStats() {
+    try {
+        localStorage.setItem('farmStats_' + userId, JSON.stringify({
+            totalClicks,
+            lastUpdate: Date.now()
+        }));
+    } catch (error) {
+        console.warn('Не удалось сохранить статистику:', error);
     }
 }
 
@@ -89,7 +222,7 @@ function showRoulette() {
         const img = document.createElement('img');
         img.src = `images/${randomImage}`;
         img.className = 'card-image';
-        img.alt = `Card ${i + 1}`;
+        img.alt = Card `${i + 1}`;
         img.onerror = function() {
             this.src = 'https://via.placeholder.com/180x180/1e293b/ffffff?text=Card+' + (i + 1);
         };
@@ -105,8 +238,9 @@ function showRoulette() {
         // Анимируем движение рулетки
         setTimeout(() => {
             // Вычисляем смещение для остановки на победителе
-            const targetPosition = -(winnerIndex * 200); // 200px = ширина картинки + margin
+            const targetPosition = -(winnerIndex * 200);
             rouletteTrack.style.transform = `translateX(${targetPosition}px)`;
+            
             // Подсвечиваем победившую картинку
             setTimeout(() => {
                 const images = rouletteTrack.querySelectorAll('.card-image');
@@ -117,8 +251,8 @@ function showRoulette() {
                 // Показываем результат
                 setTimeout(() => {
                     const cardId = winnerImage.replace('card', '').replace('.png', '');
-                    const card = {
-                        id: Date.now(),
+                    const card = {        
+id: Date.now(),
                         cardId: parseInt(cardId) || 1,
                         rarity: winnerRarity,
                         name: `Карта #${cardId}`,
@@ -133,9 +267,6 @@ function showRoulette() {
                     // Добавляем карту в коллекцию
                     myCards.push(card);
                     displayMyCards();
-                    
-                    // Обновляем баланс (отнимаем стоимость пака)
-                    updateBalance(-50);
                     
                     // Скрываем рулетку через 3 секунды
                     setTimeout(() => {
@@ -159,10 +290,8 @@ function initializeOpenPackButton() {
         return;
     }
     
-    console.log('✅ Кнопка найдена, добавляем обработчик');
-    
     openPackBtn.addEventListener('click', async function() {
-        console.log('🎯 Кнопка нажата!');
+        console.log('🎯 Кнопка открытия пака нажата!');
         
         if (isOpeningPack) {
             console.log('Уже открывается пак, игнорируем');
@@ -178,18 +307,21 @@ function initializeOpenPackButton() {
             openPackBtn.textContent = '⌛️ Обработка...';
             
             // Проверяем баланс
-            const balanceElement = document.getElementById('balance');
-            const currentBalance = parseInt(balanceElement.textContent) || 0;
+            const currentBalance = getCurrentBalance();
+            const packCost = 50;
             
-            if (currentBalance < 50) {
-                alert('❌ Недостаточно хериков для открытия пака! Нужно 50 хериков.');
+            if (currentBalance < packCost) {
+                alert(`❌ Недостаточно хериков! Нужно ${packCost}, у вас ${currentBalance}`);
                 return;
             }
+            
+            // Списываем стоимость пака
+            updateBalance(-packCost);
             
             // Показываем рулетку
             const wonCard = await showRoulette();
             
-            // Отправляем данные на сервер (если нужно)
+            // Отправляем данные на сервер
             try {
                 await fetch(`${BACKEND_URL}/open-pack`, {
                     method: 'POST',
@@ -205,7 +337,7 @@ function initializeOpenPackButton() {
                     })
                 });
             } catch (error) {
-                console.warn('Не удалось сохранить на сервер, продолжаем локально:', error);
+                console.warn('Не удалось сохранить на сервер:', error);
             }
             
             console.log('✅ Пак открыт успешно!');
@@ -218,7 +350,7 @@ function initializeOpenPackButton() {
             isOpeningPack = false;
             openPackBtn.disabled = false;
             openPackBtn.textContent = originalText;
-         console.log('🔄 Кнопка восстановлена');
+            console.log('🔄 Кнопка восстановлена');
         }
     });
 }
@@ -240,12 +372,13 @@ function displayMyCards() {
             margin-top: 15px;
         ">
             ${myCards.map(card => `
-                <div class="card ${card.rarity}" style="
+<div class="card ${card.rarity}" style="
                     background: #1e293b;
                     border-radius: 10px;
                     padding: 12px;
                     text-align: center;
                     border: 2px solid ${getRarityColor(card.rarity)};
+                    animation: newCard 0.5s ease-out;
                 ">
                     <img src="images/${card.image || `card${card.cardId}.png`}" 
                          alt="Card ${card.cardId}"
@@ -313,8 +446,7 @@ async function loadMarket() {
                                     ${listing.cardName || 'Карта #' + (listing.cardId || '?')}
                                 </div>
                                 <div style="color: ${getRarityColor(listing.rarity)}; font-size: 12px; margin-bottom: 10px;">
-                                    ${listing.rarity ? listing.rarity.   
-                                        toUpperCase() : 'COMMON'}
+                                    ${listing.rarity ? listing.rarity.toUpperCase() : 'COMMON'}
                                 </div>
                                 <div class="price" style="
                                     color: #22c55e;
@@ -324,8 +456,8 @@ async function loadMarket() {
                                 ">
                                     ${listing.price || 100} хериков
                                 </div>
-                                <button onclick="buyCard(${listing.id})" 
-                                        style="
+                                <button onclick="buyCard(${listing.id})"
+ style="
                                             background: #6366f1;
                                             color: white;
                                             border: none;
@@ -370,13 +502,6 @@ function getRandomRarity() {
     return rarities[Math.floor(Math.random() * rarities.length)];
 }
 
-function updateBalance(amount) {
-    const balanceElement = document.getElementById('balance');
-    const currentBalance = parseInt(balanceElement.textContent) || 0;
-    const newBalance = Math.max(0, currentBalance + amount);
-    balanceElement.textContent = `${newBalance} хериков`;
-}
-
 function sellCard(cardId) {
     const card = myCards.find(c => c.id === cardId);
     if (!card) {
@@ -384,7 +509,11 @@ function sellCard(cardId) {
         return;
     }
     
-    const price = prompt(`Введите цену для карты #${card.cardId} (${card.rarity}):`, '100');
+    const defaultPrice = card.rarity === 'legendary' ? 500 :
+                        card.rarity === 'epic' ? 300 :
+                        card.rarity === 'rare' ? 150 : 50;
+    
+    const price = prompt(`Введите цену для карты #${card.cardId} (${card.rarity}):`, defaultPrice.toString());
     if (price && !isNaN(price) && price > 0) {
         if (confirm(`Выставить карту #${card.cardId} на продажу за ${price} хериков?`)) {
             // Удаляем карту из коллекции
@@ -400,7 +529,6 @@ function sellCard(cardId) {
 }
 
 function addToMarket(card, price) {
-    // Здесь можно отправить на сервер
     console.log('Adding to market:', { card, price });
     // Для демо просто обновляем интерфейс
     loadMarket();
@@ -409,14 +537,12 @@ function addToMarket(card, price) {
 function buyCard(listingId) {
     const price = prompt('Подтвердите покупку (введите сумму):', '100');
     if (price && !isNaN(price)) {
-        const balanceElement = document.getElementById('balance');
-        const currentBalance = parseInt(balanceElement.textContent) || 0;
+        const currentBalance = getCurrentBalance();
         
         if (currentBalance >= parseInt(price)) {
             if (confirm(`Купить карту за ${price} хериков?`)) {
                 updateBalance(-parseInt(price));
                 alert('🎉 Покупка успешна! Карта добавлена в вашу коллекцию.');
-                // Здесь можно добавить логику покупки
             }
         } else {
             alert('❌ Недостаточно хериков для покупки!');
@@ -424,16 +550,61 @@ function buyCard(listingId) {
     }
 }
 
+// ========== БУСТЫ И УЛУЧШЕНИЯ ==========
+function addBoost(type, multiplier) {
+    farmBoost *= multiplier;
+    updateFarmCounter();
+    
+    let message = '';
+    switch(type) {
+        case 'double':
+            message = '⚡️ БУСТ! Теперь вы получаете в 2 раза больше хериков!';
+            heriksPerClick *= 2;
+            break;
+        case 'triple':
+            message = '🔥 МЕГА БУСТ! Теперь вы получаете в 3 раза больше хериков!';
+            heriksPerClick *= 3;
+            break;
+        default:
+            message = '✨ Получен буст!';
+    }
+    
+    alert(message);
+    
+    // Сбрасываем буст через 30 секунд
+    setTimeout(() => {
+        farmBoost /= multiplier;
+heriksPerClick = 1;
+        updateFarmCounter();
+        alert('⏰ Буст закончился');
+    }, 30000);
+}
+
 // ========== ИНИЦИАЛИЗАЦИЯ ПРИЛОЖЕНИЯ ==========
 document.addEventListener('DOMContentLoaded', function() {
     console.log('=== DOM LOADED ===');
     
-    // 1. Инициализируем кнопку открытия пака
+    // 1. Инициализируем кнопку фарма
+    initializeFarmButton();
+    
+    // 2. Инициализируем кнопку открытия пака
     initializeOpenPackButton();
     
-    // 2. Загружаем начальные данные
+    // 3. Загружаем начальные данные
     loadProfile();
     loadMarket();
+    
+    // 4. Восстанавливаем статистику из localStorage
+    try {
+        const savedStats = localStorage.getItem('farmStats_' + userId);
+        if (savedStats) {
+            const stats = JSON.parse(savedStats);
+            totalClicks = stats.totalClicks || 0;
+            updateFarmCounter();
+        }
+    } catch (error) {
+        console.warn('Не удалось загрузить статистику:', error);
+    }
     
     console.log('=== APP INITIALIZED ===');
 });
@@ -441,3 +612,4 @@ document.addEventListener('DOMContentLoaded', function() {
 // ========== ГЛОБАЛЬНЫЕ ФУНКЦИИ ==========
 window.sellCard = sellCard;
 window.buyCard = buyCard;
+window.addBoost = addBoost;                       

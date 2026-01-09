@@ -195,3 +195,106 @@ button:hover {
     margin-top: 20px;
     backdrop-filter: blur(10px);
 }
+/* Стили для кнопки фарма */
+#farmHeriks {
+    background: linear-gradient(45deg, #f59e0b, #fbbf24);
+    color: white;
+    border: none;
+    cursor: pointer;
+    transition: all 0.3s;
+    box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4);
+    font-size: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#farmHeriks:hover {
+    transform: scale(1.1);
+    box-shadow: 0 6px 20px rgba(245, 158, 11, 0.6);
+}
+
+#farmHeriks:active {
+    transform: scale(0.95);
+}
+
+#farmCounter {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 10px;
+    border-radius: 8px;
+    margin-top: 10px;
+    font-size: 13px;
+}
+
+/* Анимации */
+@keyframes bounce {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.3); }
+}
+
+@keyframes newCard {
+    0% { transform: scale(0.8); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes coinEffect {
+    0% { 
+        transform: translateY(0) scale(1); 
+        opacity: 1; 
+        filter: brightness(1);
+    }
+    50% { 
+        transform: translateY(-25px) scale(1.2); 
+        opacity: 0.8;
+        filter: brightness(1.5);
+    }
+    100% { 
+        transform: translateY(-50px) scale(0.5); 
+        opacity: 0; 
+        filter: brightness(2);
+    }
+}
+
+/* Стили для маркет-карт */
+.market-card {
+    background: #1e293b;
+    border-radius: 10px;
+    padding: 15px;
+    transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.market-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+}
+
+/* Стили для рулетки */
+#rouletteContainer {
+    background: linear-gradient(135deg, #0f172a, #1e293b);
+    padding: 20px;
+    border-radius: 15px;
+    margin: 20px 0;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+
+#rouletteResult {
+    padding: 15px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    margin-top: 20px;
+    backdrop-filter: blur(10px);
+}
+
+/* Адаптивность */
+@media (max-width: 600px) {
+    #farmHeriks {
+        width: 60px;
+        height: 60px;
+        font-size: 24px;
+    }
+    
+    .card-image {
+        width: 140px;
+        height: 140px;
+    }
+}
