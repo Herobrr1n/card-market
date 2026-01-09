@@ -157,18 +157,34 @@ document.getElementById('openPack').onclick = async () => {
 function showCard(card) {
     const cardsDiv = document.getElementById('cards');
 
-    const rarityClass = card.rarity; // common / rare / epic
+    const wrapper = document.createElement('div');
+    wrapper.className = 'card-wrapper';
+
+    const inner = document.createElement('div');
+    inner.className = 'card-inner';
+
+    const back = document.createElement('div');
+    back.className = 'card-face card-back';
+    back.innerText = '🂠';
+
+    const front = document.createElement('div');
+    front.className = card-face card-front card ${card.rarity};
+
     const imgSrc = images/card${card.cardId}.png;
 
-    const div = document.createElement('div');
-    div.className = card ${rarityClass};
-
-    div.innerHTML = `
+    front.innerHTML = `
         <img src="${imgSrc}">
         <div><b>Карта #${card.cardId}</b></div>
         <div>${card.rarity.toUpperCase()}</div>
         <button onclick="createListing(${card.id}, 100)">Продать</button>
     `;
 
-    cardsDiv.appendChild(div);
+    inner.appendChild(back);
+    inner.appendChild(front);
+    wrapper.appendChild(inner);
+    cardsDiv.appendChild(wrapper);
+
+    setTimeout(() => {
+        wrapper.classList.add('open');
+    }, 300);
 }
