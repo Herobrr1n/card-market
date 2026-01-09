@@ -25,20 +25,19 @@ console.log('User:', { userId, username });
 const BACKEND_URL = 'http://localhost:3000';
 console.log('Backend URL:', BACKEND_URL);
 
-// Картинки для рулетки
-const CARD_IMAGES = [
-    'card1.png', 'card2.png', 'card3.png', 'card4.png', 'card5.png',
-    'card6.png', 'card7.png', 'card8.png', 'card9.png', 'card10.png'
-];
+// Картинки для рулетки (убедитесь что файлы существуют)
+const CARD_IMAGES = [];
+for (let i = 1; i <= 10; i++) {
+    CARD_IMAGES.push(`card${i}.png`);
+}
 
 // ========== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ==========
 let isOpeningPack = false;
 let myCards = [];
 let totalClicks = 0;
 let heriksPerClick = 1;
-let farmBoost = 1;
 let lastClickTime = 0;
-const CLICK_COOLDOWN = 100; // 100ms между кликами
+const CLICK_COOLDOWN = 100;
 
 // ========== ПРОФИЛЬ ==========
 async function loadProfile() {
@@ -46,37 +45,23 @@ async function loadProfile() {
     try {
         document.getElementById('username').textContent = `@${username}`;
         
-        // Пробуем получить баланс с сервера
-        const response = await fetch(`${BACKEND_URL}/profile?userId=${userId}&username=${encodeURIComponent(username)}`, {
-            method: 'GET',
-            headers: {
-                'Accept': 'application/json'
-            }
-        });
+        // Для демо - устанавливаем начальный баланс
+        const initialBalance = 100;
+        updateBalanceDisplay(initialBalance);
         
+        // Если хотите подключить бэкенд, раскомментируйте:
+        /*
+        const response = await fetch(`${BACKEND_URL}/profile?userId=${userId}&username=${encodeURIComponent(username)}`);
         if (response.ok) {
             const data = await response.json();
-            console.log('Profile data:', data);
-            updateBalanceDisplay(data.heriki || data.balance || 100);
-            
-            // Загружаем карты пользователя
-            if (data.cards && Array.isArray(data.cards)) {
-                myCards = data.cards;
-                displayMyCards();
-            }
-            
-            // Загружаем статистику фарма если есть
-            if (data.farmStats) {
-                totalClicks = data.farmStats.totalClicks || 0;
-                updateFarmCounter();
-            }
-        } else {
-            console.warn('Profile endpoint failed, using defaults');
-            updateBalanceDisplay(100);
+            updateBalanceDisplay(data.balance || 100);
+            if (data.cards) myCards = data.cards;
         }
+        */
+        
     } catch (error) {
         console.error('Profile load error:', error);
-        updateBalanceDisplay('Ошибка загрузки');
+        updateBalanceDisplay(100);
     }
 }
 
@@ -95,30 +80,7 @@ function updateBalance(amount) {
     const currentBalance = getCurrentBalance();
     const newBalance = Math.max(0, currentBalance + amount);
     updateBalanceDisplay(newBalance);
-    
-    // Сохраняем на сервер если нужно
-    saveBalanceToServer(newBalance);
-    
     return newBalance;
-}
-
-async function saveBalanceToServer(balance) {
-    try {
-        await fetch(`${BACKEND_URL}/update-balance`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            },
-            body: JSON.stringify({
-                userId,
-                balance,
-                totalClicks
-            })
-        });
-    } catch (error) {
-        console.warn('Не удалось сохранить баланс на сервер:', error);
-    }
 }
 
 // ========== ФАРМ ХЕРИКОВ ==========
@@ -133,7 +95,8 @@ function initializeFarmButton() {
     
     farmBtn.addEventListener('click', function(event) {
         const now = Date.now();
-// Проверяем кд
+        
+        // Проверяем кд
         if (now - lastClickTime < CLICK_COOLDOWN) {
             return;
         }
@@ -150,15 +113,12 @@ function initializeFarmButton() {
         createCoinEffect(event);
         
         // Добавляем херики
-        const earned = heriksPerClick * farmBoost;
+        const earned = heriksPerClick;
         const newBalance = updateBalance(earned);
         
         // Обновляем статистику
         totalClicks++;
         updateFarmCounter();
-        
-        // Сохраняем статистику
-        saveFarmStats();
         
         console.log(`💰 Получено ${earned} хериков. Всего: ${newBalance}`);
     });
@@ -169,7 +129,7 @@ function initializeFarmButton() {
 function createCoinEffect(event) {
     const coin = document.createElement('div');
     coin.className = 'coin-popup';
-    coin.textContent = `+${heriksPerClick * farmBoost} 💰`;
+    coin.textContent = `+${heriksPerClick} 💰`;
     coin.style.left = (event.clientX - 20) + 'px';
     coin.style.top = (event.clientY - 20) + 'px';
     
@@ -181,102 +141,114 @@ function createCoinEffect(event) {
 }
 
 function updateFarmCounter() {
-    const farmCounter = document.getElementById('farmCounter');
+const farmCounter = document.getElementById('farmCounter');
     if (farmCounter) {
         farmCounter.innerHTML = `
             <div>Всего кликов: <b>${totalClicks}</b></div>
-            <div>Хериков за клик: <b>${heriksPerClick * farmBoost}</b></div>
-            <div style="font-size: 12px; color: #6366f1;">Буст: x${farmBoost}</div>
+            <div>Хериков за клик: <b>${heriksPerClick}</b></div>
         `;
-    }
-}
-
-function saveFarmStats() {
-    try {
-        localStorage.setItem('farmStats_' + userId, JSON.stringify({
-            totalClicks,
-            lastUpdate: Date.now()
-        }));
-    } catch (error) {
-        console.warn('Не удалось сохранить статистику:', error);
     }
 }
 
 // ========== РУЛЕТКА ДЛЯ ОТКРЫТИЯ ПАКА ==========
 function showRoulette() {
-    const rouletteContainer = document.getElementById('rouletteContainer');
-    const rouletteTrack = document.getElementById('rouletteTrack');
-    const rouletteResult = document.getElementById('rouletteResult');
-    
-    // Показываем контейнер рулетки
-    rouletteContainer.style.display = 'block';
-    rouletteResult.innerHTML = '🎰 Крутим рулетку...';
-    
-    // Очищаем трек
-    rouletteTrack.innerHTML = '';
-    rouletteTrack.style.transform = 'translateX(0)';
-    
-    // Добавляем много картинок для эффекта бесконечной ленты
-    for (let i = 0; i < 30; i++) {
-        const randomImage = CARD_IMAGES[Math.floor(Math.random() * CARD_IMAGES.length)];
-        const img = document.createElement('img');
-        img.src = `images/${randomImage}`;
-        img.className = 'card-image';
-        img.alt = Card `${i + 1}`;
-        img.onerror = function() {
-            this.src = 'https://via.placeholder.com/180x180/1e293b/ffffff?text=Card+' + (i + 1);
-        };
-        rouletteTrack.appendChild(img);
-    }
-    
     return new Promise((resolve) => {
-        // Выбираем случайную картинку как победителя
-        const winnerIndex = Math.floor(Math.random() * 20) + 5;
-        const winnerImage = CARD_IMAGES[Math.floor(Math.random() * CARD_IMAGES.length)];
+        const rouletteContainer = document.getElementById('rouletteContainer');
+        const rouletteDiv = document.getElementById('roulette');
+        const resultText = document.getElementById('resultText');
+        const rouletteTitle = document.getElementById('rouletteTitle');
+        const closeBtn = document.getElementById('closeRoulette');
+        
+        // Показываем рулетку
+        rouletteContainer.style.display = 'block';
+        rouletteTitle.textContent = '🎰 Открываем пак...';
+        resultText.textContent = 'Подготовка рулетки...';
+        closeBtn.style.display = 'none';
+        
+        // Очищаем рулетку
+        rouletteDiv.innerHTML = '';
+        
+        // Создаем контейнер для карточек рулетки
+        const track = document.createElement('div');
+        track.style.cssText = `
+            display: flex;
+            position: absolute;
+            height: 100%;
+            align-items: center;
+            padding-left: 20px;
+            transition: transform 3s cubic-bezier(0.1, 0.7, 0.1, 1);
+        `;
+        
+        // Добавляем карточки в рулетку
+        for (let i = 0; i < 20; i++) {
+            const cardIndex = i % CARD_IMAGES.length;
+            const img = document.createElement('img');
+            img.className = 'roulette-card';
+            img.src = `images/card${(cardIndex + 1)}.png`;
+            img.alt = `Card ${cardIndex + 1}`;
+            img.onerror = function() {
+                this.src = `https://via.placeholder.com/150x180/1e293b/ffffff?text=Card+${cardIndex + 1}`;
+            };
+            track.appendChild(img);
+        }
+        
+        rouletteDiv.appendChild(track);
+        
+        // Выбираем случайную карту как победителя
+        const winnerIndex = Math.floor(Math.random() * 15) + 3;
+        const winnerCardId = (winnerIndex % CARD_IMAGES.length) + 1;
         const winnerRarity = getRandomRarity();
         
-        // Анимируем движение рулетки
+        console.log(`Winner: card${winnerCardId} (${winnerRarity})`);
+        
+        // Этап 1: Подготовка
         setTimeout(() => {
-            // Вычисляем смещение для остановки на победителе
-            const targetPosition = -(winnerIndex * 200);
-            rouletteTrack.style.transform = `translateX(${targetPosition}px)`;
+            resultText.textContent = 'Рулетка запущена...';
             
-            // Подсвечиваем победившую картинку
+            // Этап 2: Запуск анимации
             setTimeout(() => {
-                const images = rouletteTrack.querySelectorAll('.card-image');
-                if (images[winnerIndex]) {
-                    images[winnerIndex].classList.add('highlighted');
-                }
+                // Вычисляем позицию для остановки на победителе
+                const cardWidth = 150 + 20; // ширина + margin
+                const targetPosition = -(winnerIndex * cardWidth) + (rouletteDiv.offsetWidth / 2) - (cardWidth / 2);
+                track.style.transform = `translateX(${targetPosition}px)`;
                 
-                // Показываем результат
+                // Этап 3: Подсветка победителя
                 setTimeout(() => {
-                    const cardId = winnerImage.replace('card', '').replace('.png', '');
-                    const card = {        
-id: Date.now(),
-                        cardId: parseInt(cardId) || 1,
+                    const cards = track.querySelectorAll('.roulette-card');
+                    if (cards[winnerIndex]) {
+                        cards[winnerIndex].classList.add('highlight');
+                    }
+                    
+                    // Создаем объект карты-победителя
+                    const wonCard = {
+                        id: Date.now() + winnerIndex,
+                        cardId: winnerCardId,
                         rarity: winnerRarity,
-                        name: `Карта #${cardId}`,
-                        image: winnerImage
+                        name: `Карта #${winnerCardId}`,
+                        image: `card${winnerCardId}.png`
                     };
                     
-                    rouletteResult.innerHTML = `
-                        🎉 Вы получили: <span style="color:${getRarityColor(winnerRarity)}">
-                        ${winnerRarity.toUpperCase()} карту #${cardId}</span>!
+                    resultText.innerHTML = `
+                        🎉 <strong>ВЫ ВЫИГРАЛИ!</strong><br>
+                        <span style="color:${getRarityColor(winnerRarity)}">
+                        ${winnerRarity.toUpperCase()} карту #${winnerCardId}</span>
                     `;
+                    rouletteTitle.textContent = '🎊 Поздравляем!';
                     
                     // Добавляем карту в коллекцию
-                    myCards.push(card);
-                    displayMyCards();
+                    myCards.push(wonCard);
+displayMyCards();
                     
-                    // Скрываем рулетку через 3 секунды
-                    setTimeout(() => {
-                        rouletteContainer.style.display = 'none';
-                        resolve(card);
-                    }, 3000);
+                    // Показываем кнопку закрытия
+                    closeBtn.style.display = 'inline-block';
                     
-                }, 1000);
-            }, 2000);
-        }, 100);
+                    resolve(wonCard);
+                    
+                }, 2000); // Ждем окончания анимации
+                
+            }, 1000); // Задержка перед запуском
+            
+        }, 1000); // Начальная задержка
     });
 }
 
@@ -284,12 +256,14 @@ id: Date.now(),
 function initializeOpenPackButton() {
     console.log('Initializing open pack button...');
     const openPackBtn = document.getElementById('openPack');
+    const closeRouletteBtn = document.getElementById('closeRoulette');
     
     if (!openPackBtn) {
         console.error('❌ Кнопка #openPack не найдена!');
         return;
     }
     
+    // Кнопка открытия пака
     openPackBtn.addEventListener('click', async function() {
         console.log('🎯 Кнопка открытия пака нажата!');
         
@@ -304,7 +278,7 @@ function initializeOpenPackButton() {
         try {
             // Блокируем кнопку
             openPackBtn.disabled = true;
-            openPackBtn.textContent = '⌛️ Обработка...';
+            openPackBtn.textContent = '⌛️ Проверка...';
             
             // Проверяем баланс
             const currentBalance = getCurrentBalance();
@@ -315,32 +289,15 @@ function initializeOpenPackButton() {
                 return;
             }
             
+            openPackBtn.textContent = '🎰 Открываем...';
+            
             // Списываем стоимость пака
             updateBalance(-packCost);
             
-            // Показываем рулетку
+            // Показываем рулетку и ждем результат
             const wonCard = await showRoulette();
             
-            // Отправляем данные на сервер
-            try {
-                await fetch(`${BACKEND_URL}/open-pack`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        userId,
-                        username,
-                        card: wonCard,
-                        timestamp: Date.now()
-                    })
-                });
-            } catch (error) {
-                console.warn('Не удалось сохранить на сервер:', error);
-            }
-            
-            console.log('✅ Пак открыт успешно!');
+            console.log('✅ Пак открыт успешно! Получена карта:', wonCard);
             
         } catch (error) {
             console.error('❌ Ошибка при открытии пака:', error);
@@ -353,6 +310,11 @@ function initializeOpenPackButton() {
             console.log('🔄 Кнопка восстановлена');
         }
     });
+    
+    // Кнопка закрытия рулетки
+    closeRouletteBtn.addEventListener('click', function() {
+        document.getElementById('rouletteContainer').style.display = 'none';
+    });
 }
 
 // ========== ПОКАЗ КАРТ ПОЛЬЗОВАТЕЛЯ ==========
@@ -360,38 +322,51 @@ function displayMyCards() {
     const myCardsDiv = document.getElementById('myCards');
     
     if (!myCards || myCards.length === 0) {
-        myCardsDiv.innerHTML = '<p style="text-align: center; color: #94a3b8;">У вас пока нет карт</p>';
+        myCardsDiv.innerHTML = `
+            <div style="
+                text-align: center;
+                padding: 30px;
+                background: #1e293b;
+                border-radius: 10px;
+                color: #94a3b8;
+            ">
+                <div style="font-size: 48px; margin-bottom: 10px;">🃏</div>
+                <p>У вас пока нет карт</p>
+                <p style="font-size: 14px;">Откройте пак, чтобы получить первую карту!</p>
+            </div>
+        `;
         return;
     }
     
     myCardsDiv.innerHTML = `
         <div style="
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
             gap: 15px;
-            margin-top: 15px;
         ">
             ${myCards.map(card => `
-<div class="card ${card.rarity}" style="
+                <div class="user-card" style="
                     background: #1e293b;
                     border-radius: 10px;
                     padding: 12px;
                     text-align: center;
                     border: 2px solid ${getRarityColor(card.rarity)};
-                    animation: newCard 0.5s ease-out;
+                    transition: transform 0.3s;
                 ">
-                    <img src="images/${card.image || `card${card.cardId}.png`}" 
+                    <img src="images/${card.image}" 
                          alt="Card ${card.cardId}"
                          style="
                             width: 100%;
                             height: 140px;
-                            object-fit: cover;
+ object-fit: cover;
                             border-radius: 8px;
                             margin-bottom: 10px;
                          "
                          onerror="this.onerror=null; this.src='https://via.placeholder.com/150x140/1e293b/ffffff?text=Card+${card.cardId}'">
-                    <div style="font-weight: bold; margin-bottom: 5px;">Карта #${card.cardId}</div>
-                    <div style="color: ${getRarityColor(card.rarity)}; font-size: 12px; margin-bottom: 10px;">
+                    <div style="font-weight: bold; margin-bottom: 5px; font-size: 14px;">
+                        Карта #${card.cardId}
+                    </div>
+                    <div style="color: ${getRarityColor(card.rarity)}; font-size: 12px; margin-bottom: 10px; font-weight: bold;">
                         ${card.rarity ? card.rarity.toUpperCase() : 'COMMON'}
                     </div>
                     <button onclick="sellCard(${card.id})" 
@@ -399,12 +374,15 @@ function displayMyCards() {
                                 background: #22c55e;
                                 color: white;
                                 border: none;
-                                padding: 6px 12px;
+                                padding: 8px 12px;
                                 border-radius: 6px;
                                 font-size: 12px;
                                 cursor: pointer;
                                 width: 100%;
-                            ">
+                                transition: background 0.3s;
+                            "
+                            onmouseover="this.style.background='#16a34a'"
+                            onmouseout="this.style.background='#22c55e'">
                         💰 Продать
                     </button>
                 </div>
@@ -414,75 +392,71 @@ function displayMyCards() {
 }
 
 // ========== МАРКЕТ ==========
-async function loadMarket() {
+function loadMarket() {
     console.log('Loading market...');
     const marketDiv = document.getElementById('market');
     
-    try {
-        marketDiv.innerHTML = '<p style="text-align: center;">Загрузка маркета...</p>';
-        
-        const response = await fetch(`${BACKEND_URL}/market`);
-        
-        if (response.ok) {
-            const listings = await response.json();
-            console.log('Market listings:', listings);
-            
-            if (listings && listings.length > 0) {
-                marketDiv.innerHTML = `
-                    <div style="
-                        display: grid;
-                        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-                        gap: 15px;
-                        margin-top: 15px;
-                    ">
-                        ${listings.map(listing => `
-                            <div class="market-card" style="
-                                background: #1e293b;
-                                border-radius: 10px;
-                                padding: 15px;
-                                text-align: center;
-                            ">
-                                <div style="font-weight: bold; font-size: 16px; margin-bottom: 10px;">
-                                    ${listing.cardName || 'Карта #' + (listing.cardId || '?')}
-                                </div>
-                                <div style="color: ${getRarityColor(listing.rarity)}; font-size: 12px; margin-bottom: 10px;">
-                                    ${listing.rarity ? listing.rarity.toUpperCase() : 'COMMON'}
-                                </div>
-                                <div class="price" style="
-                                    color: #22c55e;
-                                    font-weight: bold;
-                                    font-size: 18px;
-                                    margin: 15px 0;
-                                ">
-                                    ${listing.price || 100} хериков
-                                </div>
-                                <button onclick="buyCard(${listing.id})"
- style="
-                                            background: #6366f1;
-                                            color: white;
-                                            border: none;
-                                            padding: 8px 15px;
-                                            border-radius: 6px;
-                                            cursor: pointer;
-                                            width: 100%;
-                                            font-size: 14px;
-                                        ">
-                                    🛒 Купить
-                                </button>
-                            </div>
-                        `).join('')}
+    // Для демо - создаем тестовые лоты
+    const demoListings = [
+        { id: 1, cardId: 3, cardName: 'Огненный дракон', rarity: 'epic', price: 300 },
+        { id: 2, cardId: 7, cardName: 'Водяной дух', rarity: 'rare', price: 150 },
+        { id: 3, cardId: 1, cardName: 'Земляной голем', rarity: 'common', price: 50 },
+        { id: 4, cardId: 10, cardName: 'Легендарный феникс', rarity: 'legendary', price: 1000 }
+    ];
+    
+    marketDiv.innerHTML = `
+        <div style="
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+        ">
+            ${demoListings.map(listing => `
+                <div class="market-listing" style="
+                    background: #1e293b;
+                    border-radius: 10px;
+                    padding: 15px;
+                    text-align: center;
+                    border: 2px solid ${getRarityColor(listing.rarity)};
+                ">
+                    <div style="font-weight: bold; font-size: 16px; margin-bottom: 10px;">
+                        ${listing.cardName}
                     </div>
-                `;
-            } else {
-                marketDiv.innerHTML = '<p style="text-align: center; color: #94a3b8;">На маркете пока пусто</p>';
-            }
-        } else {
-            marketDiv.innerHTML = '<p style="text-align: center; color: #94a3b8;">Маркет временно недоступен</p>';
-        }
-    } catch (error) {
-        console.error('Market load error:', error);
-        marketDiv.innerHTML = '<p style="text-align: center; color: #dc2626;">Ошибка загрузки маркета</p>';
-    }
+                    <img src="images/card${listing.cardId}.png" 
+                         alt="${listing.cardName}"
+                         style="
+                            width: 100%;
+                            height: 120px;
+                            object-fit: cover;
+                            border-radius: 8px;
+                            margin-bottom: 10px;
+                         "
+                         onerror="this.onerror=null; this.src='https://via.placeholder.com/200x120/1e293b/ffffff?text=${encodeURIComponent(listing.cardName)}'">
+                    <div style="color: ${getRarityColor(listing.rarity)}; font-size: 12px; margin-bottom: 10px; font-weight: bold;">
+                        ${listing.rarity.toUpperCase()}
+                    </div>
+                    <div style="color: #22c55e; font-weight: bold; font-size: 18px; margin: 10px 0;">
+                        ${listing.price} хериков
+                    </div>
+                    <button onclick="buyCard(${listing.id})" 
+                            style="
+                                background: #6366f1;
+                                color: white;
+                                border: none;
+padding: 8px 15px;
+                                border-radius: 6px;
+                                cursor: pointer;
+                                width: 100%;
+                                font-size: 14px;
+                                transition: background 0.3s;
+                            "
+                            onmouseover="this.style.background='#4f46e5'"
+                            onmouseout="this.style.background='#6366f1'">
+                        🛒 Купить
+                    </button>
+                </div>
+            `).join('')}
+        </div>
+    `;
 }
 
 // ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
@@ -498,8 +472,11 @@ function getRarityColor(rarity) {
 }
 
 function getRandomRarity() {
-    const rarities = ['common', 'common', 'common', 'rare', 'rare', 'epic', 'legendary'];
-    return rarities[Math.floor(Math.random() * rarities.length)];
+    const rand = Math.random();
+    if (rand < 0.5) return 'common';      // 50%
+    if (rand < 0.8) return 'rare';        // 30%
+    if (rand < 0.95) return 'epic';       // 15%
+    return 'legendary';                   // 5%
 }
 
 function sellCard(cardId) {
@@ -520,64 +497,27 @@ function sellCard(cardId) {
             myCards = myCards.filter(c => c.id !== cardId);
             displayMyCards();
             
-            // Добавляем на маркет
-            addToMarket(card, parseInt(price));
+            // Добавляем херики за продажу
+            updateBalance(parseInt(price));
             
-            alert(`✅ Карта #${card.cardId} выставлена на маркет за ${price} хериков!`);
+            alert(`✅ Карта #${card.cardId} продана за ${price} хериков!`);
         }
     }
-}
-
-function addToMarket(card, price) {
-    console.log('Adding to market:', { card, price });
-    // Для демо просто обновляем интерфейс
-    loadMarket();
 }
 
 function buyCard(listingId) {
-    const price = prompt('Подтвердите покупку (введите сумму):', '100');
-    if (price && !isNaN(price)) {
-        const currentBalance = getCurrentBalance();
-        
-        if (currentBalance >= parseInt(price)) {
-            if (confirm(`Купить карту за ${price} хериков?`)) {
-                updateBalance(-parseInt(price));
-                alert('🎉 Покупка успешна! Карта добавлена в вашу коллекцию.');
-            }
-        } else {
-            alert('❌ Недостаточно хериков для покупки!');
+    const price = 100; // Для демо фиксированная цена
+    const currentBalance = getCurrentBalance();
+    
+    if (currentBalance >= price) {
+        if (confirm(`Купить карту за ${price} хериков?`)) {
+            updateBalance(-price);
+            alert('🎉 Покупка успешна! Карта добавлена в вашу коллекцию.');
+            // Здесь можно добавить логику добавления карты
         }
+    } else {
+        alert('❌ Недостаточно хериков для покупки!');
     }
-}
-
-// ========== БУСТЫ И УЛУЧШЕНИЯ ==========
-function addBoost(type, multiplier) {
-    farmBoost *= multiplier;
-    updateFarmCounter();
-    
-    let message = '';
-    switch(type) {
-        case 'double':
-            message = '⚡️ БУСТ! Теперь вы получаете в 2 раза больше хериков!';
-            heriksPerClick *= 2;
-            break;
-        case 'triple':
-            message = '🔥 МЕГА БУСТ! Теперь вы получаете в 3 раза больше хериков!';
-            heriksPerClick *= 3;
-            break;
-        default:
-            message = '✨ Получен буст!';
-    }
-    
-    alert(message);
-    
-    // Сбрасываем буст через 30 секунд
-    setTimeout(() => {
-        farmBoost /= multiplier;
-heriksPerClick = 1;
-        updateFarmCounter();
-        alert('⏰ Буст закончился');
-    }, 30000);
 }
 
 // ========== ИНИЦИАЛИЗАЦИЯ ПРИЛОЖЕНИЯ ==========
@@ -593,23 +533,11 @@ document.addEventListener('DOMContentLoaded', function() {
     // 3. Загружаем начальные данные
     loadProfile();
     loadMarket();
-    
-    // 4. Восстанавливаем статистику из localStorage
-    try {
-        const savedStats = localStorage.getItem('farmStats_' + userId);
-        if (savedStats) {
-            const stats = JSON.parse(savedStats);
-            totalClicks = stats.totalClicks || 0;
-            updateFarmCounter();
-        }
-    } catch (error) {
-        console.warn('Не удалось загрузить статистику:', error);
-    }
+    displayMyCards(); // Показываем пустые карты сначала
     
     console.log('=== APP INITIALIZED ===');
 });
 
 // ========== ГЛОБАЛЬНЫЕ ФУНКЦИИ ==========
 window.sellCard = sellCard;
-window.buyCard = buyCard;
-window.addBoost = addBoost;                       
+window.buyCard = buyCard;                                   

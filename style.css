@@ -1,3 +1,5 @@
+/* ========== ОСНОВНЫЕ СТИЛИ ========== */
+
 /* Общий фон */
 body {
     margin: 0;
@@ -5,55 +7,38 @@ body {
     font-family: Arial, sans-serif;
     background: #0f172a;
     color: #e5e7eb;
+    max-width: 800px;
+    margin: 0 auto;
+    min-height: 100vh;
 }
 
 /* Заголовки */
-h1, h2 {
+h1, h2, h3 {
     text-align: center;
     margin-bottom: 12px;
 }
 
-/* Кнопки */
-button {
-    background: #6366f1;
-    color: white;
-    border: none;
-    padding: 10px 14px;
-    border-radius: 8px;
-    cursor: pointer;
-    font-size: 14px;
+h1 {
+    color: #6366f1;
+    font-size: 28px;
+    margin-top: 10px;
 }
 
-button:hover {
-    background: #4f46e5;
+h2 {
+    color: #e5e7eb;
+    font-size: 22px;
+    margin-top: 30px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #334155;
 }
 
-/* Контейнеры */
-#cards, #market {
-    margin-top: 16px;
+h3 {
+    color: #cbd5e1;
+    font-size: 18px;
 }
 
-/* Карточка */
-.card {
-    background: #1e293b;
-    border-radius: 10px;
-    padding: 12px;
-    margin-bottom: 10px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
+/* ========== ПРОФИЛЬ ========== */
 
-/* Название карты */
-.card-name {
-    font-weight: bold;
-}
-
-/* Цена */
-.price {
-    color: #22c55e;
-    font-weight: bold;
-}
 .profile {
     display: flex;
     justify-content: space-between;
@@ -63,139 +48,54 @@ button:hover {
     border-radius: 12px;
     margin-bottom: 16px;
     font-size: 14px;
+    border: 1px solid #334155;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
 #username {
     font-weight: bold;
+    color: #60a5fa;
 }
 
 #balance {
     color: #22c55e;
     font-weight: bold;
-}
-.card {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 14px;
-    background: #020617;
-    border-radius: 14px;
-    padding: 10px;
-    margin-bottom: 14px;
-    text-align: center;
-    animation: fadeIn 0.4s ease;
+    font-size: 16px;
 }
 
-.card img {
-    width: 100%;
-    max-width: 140px;
-    border-radius: 10px;
-    margin-bottom: 8px;
+/* ========== КНОПКИ ========== */
+
+button {
+    background: #6366f1;
+    color: white;
+    border: none;
+    padding: 10px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.3s;
+    font-weight: 600;
 }
 
-/* Редкости */
-.common {
-    border: 2px solid #94a3b8;
+button:hover {
+    background: #4f46e5;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(99, 102, 241, 0.3);
 }
 
-.rare {
-    border: 2px solid #3b82f6;
-    box-shadow: 0 0 10px #3b82f6;
+button:active {
+    transform: translateY(0);
 }
 
-.epic {
-    border: 2px solid #a855f7;
-    box-shadow: 0 0 14px #a855f7;
+button:disabled {
+    background: #475569;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
 }
 
-/* Анимация */
-@keyframes fadeIn {
-    from { opacity: 0; transform: scale(0.9); }
-    to { opacity: 1; transform: scale(1); }
-}
-.card-wrapper {
-    perspective: 1000px;
-}
+/* ========== КНОПКА ФАРМА ========== */
 
-.card-inner {
-    position: relative;
-    width: 100%;
-    height: 220px;
-    transform-style: preserve-3d;
-    transition: transform 0.8s;
-}
-
-.card-wrapper.open .card-inner {
-    transform: rotateY(180deg);
-}
-
-.card-face {
-    position: absolute;
-    width: 100%;
-    height: 100%;
-    backface-visibility: hidden;
-    border-radius: 14px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-}
-
-.card-back {
-    background: #020617;
-    border: 2px dashed #475569;
-    font-size: 18px;
-}
-
-.card-front {
-    background: #020617;
-    transform: rotateY(180deg);
-}
-/* Стили для маркет-карт */
-.market-card {
-    background: #1e293b;
-    border-radius: 10px;
-    padding: 15px;
-    margin-bottom: 15px;
-    transition: transform 0.3s, box-shadow 0.3s;
-}
-
-.market-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 10px 20px rgba(0,0,0,0.3);
-}
-
-/* Стили для списков */
-.list {
-    margin-top: 20px;
-}
-
-/* Анимация для новых карт */
-@keyframes newCard {
-    0% { transform: scale(0.8); opacity: 0; }
-    100% { transform: scale(1); opacity: 1; }
-}
-
-.card.new {
-    animation: newCard 0.5s ease-out;
-}
-
-/* Стили для рулетки */
-#rouletteContainer {
-    background: linear-gradient(135deg, #0f172a, #1e293b);
-    padding: 20px;
-    border-radius: 15px;
-    margin: 20px 0;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-}
-
-#rouletteResult {
-    padding: 15px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 10px;
-    margin-top: 20px;
-    backdrop-filter: blur(10px);
-}
-/* Стили для кнопки фарма */
 #farmHeriks {
     background: linear-gradient(45deg, #f59e0b, #fbbf24);
     color: white;
@@ -207,6 +107,10 @@ button:hover {
     display: flex;
     align-items: center;
     justify-content: center;
+    margin: 0 auto;
+    width: 70px;
+    height: 70px;
+    border-radius: 50%;
 }
 
 #farmHeriks:hover {
@@ -218,23 +122,180 @@ button:hover {
     transform: scale(0.95);
 }
 
-#farmCounter {
+/* Контейнер фарма */
+#farmHeriks + div {
     background: rgba(255, 255, 255, 0.05);
     padding: 10px;
     border-radius: 8px;
     margin-top: 10px;
     font-size: 13px;
+    text-align: center;
 }
 
-/* Анимации */
+/* ========== КНОПКА ОТКРЫТИЯ ПАКА ========== */
+
+#openPack {
+    background: linear-gradient(45deg, #ec4899, #8b5cf6);
+    color: white;
+    font-size: 18px;
+    padding: 15px 30px;
+    border-radius: 12px;
+    width: 100%;
+    max-width: 300px;
+    margin: 0 auto;
+    display: block;
+}
+
+/* ========== РУЛЕТКА ========== */
+
+#rouletteContainer {
+    background: linear-gradient(135deg, #0f172a, #1e293b);
+    padding: 20px;
+    border-radius: 15px;
+    margin: 20px 0;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    border: 2px solid #334155;
+}
+
+#roulette {
+    position: relative;
+    overflow: hidden;
+    border-radius: 10px;
+    background: #0f172a;
+    border: 3px solid #6366f1;
+    height: 200px;
+    margin: 20px 0;
+}
+
+#resultText {
+    margin: 0;
+    font-size: 16px;
+    padding: 15px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    backdrop-filter: blur(10px);
+}
+
+#closeRoulette {
+    background: #64748b;
+    margin-top: 15px;
+}
+
+#closeRoulette:hover {
+    background: #475569;
+}
+
+/* Карточки в рулетке */
+.roulette-card {
+    width: 150px;
+    height: 180px;
+    object-fit: cover;
+    margin: 0 10px;
+    border-radius: 10px;
+    border: 3px solid transparent;
+    transition: all 0.3s;
+}
+
+/* ========== КАРТОЧКИ ПОЛЬЗОВАТЕЛЯ ========== */
+
+.user-card {
+    background: #1e293b;
+    border-radius: 10px;
+    padding: 12px;
+    text-align: center;
+    transition: transform 0.3s, box-shadow 0.3s;
+    border: 2px solid;
+}
+
+.user-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+}
+
+.user-card img {
+    width: 100%;
+    height: 140px;
+    object-fit: cover;
+    border-radius: 8px;
+    margin-bottom: 10px;
+}
+
+.user-card button {
+background: #22c55e;
+    width: 100%;
+}
+
+.user-card button:hover {
+    background: #16a34a;
+}
+
+/* ========== МАРКЕТ ========== */
+
+.market-listing {
+    background: #1e293b;
+    border-radius: 10px;
+    padding: 15px;
+    text-align: center;
+    transition: transform 0.3s, box-shadow 0.3s;
+    border: 2px solid;
+}
+
+.market-listing:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+}
+
+.market-listing img {
+    width: 100%;
+    height: 120px;
+    object-fit: cover;
+    border-radius: 8px;
+    margin-bottom: 10px;
+}
+
+.market-listing .price {
+    color: #22c55e;
+    font-weight: bold;
+    font-size: 18px;
+    margin: 10px 0;
+}
+
+.market-listing button {
+    background: #6366f1;
+    width: 100%;
+}
+
+.market-listing button:hover {
+    background: #4f46e5;
+}
+
+/* ========== РЕДКОСТИ КАРТ ========== */
+
+.common { 
+    border-color: #94a3b8 !important; 
+    box-shadow: 0 0 10px rgba(148, 163, 184, 0.3);
+}
+
+.rare { 
+    border-color: #3b82f6 !important; 
+    box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);
+}
+
+.epic { 
+    border-color: #a855f7 !important; 
+    box-shadow: 0 0 20px rgba(168, 85, 247, 0.5);
+}
+
+.legendary { 
+    border-color: #f59e0b !important; 
+    box-shadow: 0 0 25px rgba(245, 158, 11, 0.6);
+}
+
+/* ========== АНИМАЦИИ ========== */
+
 @keyframes bounce {
     0%, 100% { transform: scale(1); }
     50% { transform: scale(1.3); }
-}
-
-@keyframes newCard {
-    0% { transform: scale(0.8); opacity: 0; }
-    100% { transform: scale(1); opacity: 1; }
 }
 
 @keyframes coinEffect {
@@ -255,46 +316,114 @@ button:hover {
     }
 }
 
-/* Стили для маркет-карт */
-.market-card {
+@keyframes highlight {
+    0%, 100% { 
+        transform: scale(1); 
+        box-shadow: 0 0 20px #f59e0b;
+    }
+    50% { 
+        transform: scale(1.1); 
+        box-shadow: 0 0 30px #f59e0b;
+    }
+}
+
+.roulette-card.highlight {
+    animation: highlight 0.5s infinite;
+    border-color: #f59e0b !important;
+}
+
+.coin-popup {
+    position: fixed;
+    color: #f59e0b;
+    font-weight: bold;
+    font-size: 20px;
+    pointer-events: none;
+    animation: coinEffect 1s forwards;
+    z-index: 1000;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+/* ========== ГРИДЫ И КОНТЕЙНЕРЫ ========== */
+
+.list {
+    margin-top: 20px;
+}
+
+/* Сетка для карточек */
+#myCards > div,
+#market > div {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 15px;
+}
+
+/* Сообщение "нет карт" */
+#myCards > div:first-child:not(div > div) {
+    display: block !important;
+    text-align: center;
+    padding: 30px;
     background: #1e293b;
     border-radius: 10px;
-    padding: 15px;
-    transition: transform 0.3s, box-shadow 0.3s;
+    color: #94a3b8;
 }
 
-.market-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 10px 20px rgba(0,0,0,0.3);
-}
+/* ========== АДАПТИВНОСТЬ ========== */
 
-/* Стили для рулетки */
-#rouletteContainer {
-    background: linear-gradient(135deg, #0f172a, #1e293b);
-    padding: 20px;
-    border-radius: 15px;
-    margin: 20px 0;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-}
-
-#rouletteResult {
-    padding: 15px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 10px;
-    margin-top: 20px;
-    backdrop-filter: blur(10px);
-}
-
-/* Адаптивность */
 @media (max-width: 600px) {
+    body {
+        padding: 10px;
+    }
+    
+    .profile {
+        flex-direction: column;
+        gap: 8px;
+        text-align: center;
+    }
+    
+    h1 {
+        font-size: 24px;
+    }
+    
+    h2 {
+        font-size: 20px;
+    }
+    
+    button {
+        width: 100%;
+        margin-bottom: 5px;
+    }
+    
     #farmHeriks {
         width: 60px;
         height: 60px;
         font-size: 24px;
     }
     
-    .card-image {
-        width: 140px;
-        height: 140px;
+    #openPack {
+        font-size: 16px;
+        padding: 12px 20px;
+    }
+    
+    .roulette-card {
+        width: 120px;
+        height: 150px;
+    }
+    
+    #roulette {
+        height: 180px;
+    }
+    
+    /* На мобильных 2 колонки */
+    #myCards > div,
+    #market > div {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 400px) {
+    /* На очень маленьких 1 колонка */
+    #myCards > div,
+    #market > div {
+        grid-template-columns: 1fr;
     }
 }

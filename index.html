@@ -33,9 +33,9 @@
     </button>
   </div>
   
-  <!-- Рулетка для открытия пака -->
-  <div id="rouletteContainer" style="display:none; text-align:center; margin: 30px 0;">
-    <h2>🎰 Рулетка</h2>
+  <!-- Рулетка для открытия пака (скрыта по умолчанию) -->
+  <div id="rouletteContainer" style="display:none; text-align:center; margin: 30px 0; padding: 20px; background: #1e293b; border-radius: 10px;">
+    <h2 id="rouletteTitle">🎰 Рулетка</h2>
     <div id="roulette" style="
       width: 100%;
       height: 200px;
@@ -43,45 +43,32 @@
       position: relative;
       border: 3px solid #6366f1;
       border-radius: 10px;
-      background: #1e293b;
+      background: #0f172a;
+      margin: 20px 0;
     ">
-      <div id="rouletteTrack" style="
-        display: flex;
-        position: absolute;
-        height: 100%;
-        transition: transform 2s cubic-bezier(0.1, 0.7, 0.1, 1);
-      ">
-        <!-- Картинки будут добавляться динамически -->
-      </div>
+      <!-- Рулетка будет здесь -->
     </div>
-    <div id="rouletteResult" style="margin-top: 20px; font-size: 20px; font-weight: bold;"></div>
+    <div id="rouletteResult" style="margin-top: 20px; padding: 15px; background: rgba(255, 255, 255, 0.1); border-radius: 10px;">
+      <p id="resultText">Крутим рулетку...</p>
+    </div>
+    <button id="closeRoulette" style="margin-top: 15px; padding: 10px 20px; display: none;">Закрыть</button>
   </div>
   
   <!-- Полученные карты -->
   <div id="cardsContainer" style="margin: 30px 0;">
     <h2>📚 Ваши карты</h2>
-    <div id="myCards" class="list"></div>
+    <div id="myCards" style="margin-top: 15px;"></div>
   </div>
   
   <!-- Маркет -->
   <div id="marketContainer" style="margin: 30px 0;">
     <h2>🏪 Маркет</h2>
-    <div id="market" class="list"></div>
+    <div id="market" style="margin-top: 15px;"></div>
   </div>
   
   <script src="app.js"></script>
   
   <style>
-    @keyframes spin {
-      from { transform: rotate(0deg); }
-      to { transform: rotate(360deg); }
-    }
-    
-    @keyframes highlight {
-      0%, 100% { transform: scale(1); }
-      50% { transform: scale(1.1); }
-    }
-    
     @keyframes bounce {
       0%, 100% { transform: scale(1); }
       50% { transform: scale(1.2); }
@@ -92,28 +79,30 @@
       100% { transform: translateY(-50px) scale(0.5); opacity: 0; }
     }
     
-    .card-image {
-      width: 180px;
-      height: 180px;
-      object-fit: cover;
-      margin: 0 10px;
-      border-radius: 10px;
-      border: 3px solid transparent;
-    }
-    
-    .card-image.highlighted {
-      animation: highlight 0.5s infinite;
-      border-color: #f59e0b;
-      box-shadow: 0 0 20px #f59e0b;
-    }
-    
     .coin-popup {
-      position: absolute;
+      position: fixed;
       color: #f59e0b;
       font-weight: bold;
       font-size: 20px;
       pointer-events: none;
       animation: coinEffect 1s forwards;
+      z-index: 1000;
+    }
+    
+    .roulette-card {
+      width: 150px;
+      height: 180px;
+      object-fit: cover;
+      margin: 10px;
+      border-radius: 10px;
+      border: 3px solid transparent;
+      transition: all 0.3s;
+    }
+    
+    .roulette-card.highlight {
+      border-color: #f59e0b;
+      box-shadow: 0 0 20px #f59e0b;
+      animation: bounce 0.5s infinite;
     }
   </style>
 </body>
