@@ -73,3 +73,39 @@ button:hover {
     color: #22c55e;
     font-weight: bold;
 }
+.card {
+    background: #020617;
+    border-radius: 14px;
+    padding: 10px;
+    margin-bottom: 14px;
+    text-align: center;
+    animation: fadeIn 0.4s ease;
+}
+
+.card img {
+    width: 100%;
+    max-width: 140px;
+    border-radius: 10px;
+    margin-bottom: 8px;
+}
+
+/* Редкости */
+.common {
+    border: 2px solid #94a3b8;
+}
+
+.rare {
+    border: 2px solid #3b82f6;
+    box-shadow: 0 0 10px #3b82f6;
+}
+
+.epic {
+    border: 2px solid #a855f7;
+    box-shadow: 0 0 14px #a855f7;
+}
+
+/* Анимация */
+@keyframes fadeIn {
+    from { opacity: 0; transform: scale(0.9); }
+    to { opacity: 1; transform: scale(1); }
+}

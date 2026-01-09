@@ -129,4 +129,46 @@ loadMarket();
 alert("Куплено!");
 loadProfile();
 loadMarket();
+document.getElementById('openPack').onclick = async () => {
+    const opening = document.getElementById('opening');
+    const cardsDiv = document.getElementById('cards');
 
+    cardsDiv.innerHTML = '';
+    opening.style.display = 'block';
+
+    setTimeout(async () => {
+        const res = await fetch('https://herobrr1n.github.io/card-market/open-pack', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ initData: tg.initDataUnsafe })
+        });
+
+        const data = await res.json();
+        opening.style.display = 'none';
+
+        data.cards.forEach(card => {
+            showCard(card);
+        });
+
+        loadProfile();
+        loadMarket();
+    }, 1200);
+};
+function showCard(card) {
+    const cardsDiv = document.getElementById('cards');
+
+    const rarityClass = card.rarity; // common / rare / epic
+    const imgSrc = images/card${card.cardId}.png;
+
+    const div = document.createElement('div');
+    div.className = card ${rarityClass};
+
+    div.innerHTML = `
+        <img src="${imgSrc}">
+        <div><b>Карта #${card.cardId}</b></div>
+        <div>${card.rarity.toUpperCase()}</div>
+        <button onclick="createListing(${card.id}, 100)">Продать</button>
+    `;
+
+    cardsDiv.appendChild(div);
+}
