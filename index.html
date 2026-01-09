@@ -22,17 +22,34 @@
     </button>
   </div>
   
-  <!-- Анимация открытия -->
-  <div id="opening" style="display:none;text-align:center;margin:30px;padding:20px;background:#1e293b;border-radius:10px;">
-    <h2>✨ Открываем пак...</h2>
-    <div style="font-size: 64px; margin: 20px; animation: spin 1s infinite linear;">🔄</div>
-    <p>Пожалуйста, подождите</p>
+  <!-- Рулетка для открытия пака -->
+  <div id="rouletteContainer" style="display:none; text-align:center; margin: 30px 0;">
+    <h2>🎰 Рулетка</h2>
+    <div id="roulette" style="
+      width: 100%;
+      height: 200px;
+      overflow: hidden;
+      position: relative;
+      border: 3px solid #6366f1;
+      border-radius: 10px;
+      background: #1e293b;
+    ">
+      <div id="rouletteTrack" style="
+        display: flex;
+        position: absolute;
+        height: 100%;
+        transition: transform 2s cubic-bezier(0.1, 0.7, 0.1, 1);
+      ">
+        <!-- Картинки будут добавляться динамически -->
+      </div>
+    </div>
+    <div id="rouletteResult" style="margin-top: 20px; font-size: 20px; font-weight: bold;"></div>
   </div>
   
   <!-- Полученные карты -->
   <div id="cardsContainer" style="margin: 30px 0;">
     <h2>📚 Ваши карты</h2>
-    <div id="cards" class="list"></div>
+    <div id="myCards" class="list"></div>
   </div>
   
   <!-- Маркет -->
@@ -47,6 +64,26 @@
     @keyframes spin {
       from { transform: rotate(0deg); }
       to { transform: rotate(360deg); }
+    }
+    
+    @keyframes highlight {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+    }
+    
+    .card-image {
+      width: 180px;
+      height: 180px;
+      object-fit: cover;
+      margin: 0 10px;
+      border-radius: 10px;
+      border: 3px solid transparent;
+    }
+    
+    .card-image.highlighted {
+      animation: highlight 0.5s infinite;
+      border-color: #f59e0b;
+      box-shadow: 0 0 20px #f59e0b;
     }
   </style>
 </body>

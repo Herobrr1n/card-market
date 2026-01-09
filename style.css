@@ -150,3 +150,48 @@ button:hover {
     background: #020617;
     transform: rotateY(180deg);
 }
+/* Стили для маркет-карт */
+.market-card {
+    background: #1e293b;
+    border-radius: 10px;
+    padding: 15px;
+    margin-bottom: 15px;
+    transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.market-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+}
+
+/* Стили для списков */
+.list {
+    margin-top: 20px;
+}
+
+/* Анимация для новых карт */
+@keyframes newCard {
+    0% { transform: scale(0.8); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+.card.new {
+    animation: newCard 0.5s ease-out;
+}
+
+/* Стили для рулетки */
+#rouletteContainer {
+    background: linear-gradient(135deg, #0f172a, #1e293b);
+    padding: 20px;
+    border-radius: 15px;
+    margin: 20px 0;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+
+#rouletteResult {
+    padding: 15px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    margin-top: 20px;
+    backdrop-filter: blur(10px);
+}
