@@ -1,6 +1,6 @@
 // ========== КОНФИГУРАЦИЯ ==========
 const CONFIG = {
-    BACKEND_URL: 'http://localhost:3000', // Подключаемся к вашему серверу
+    BACKEND_URL: 'http://localhost:3000',
     PACK_COST: 50,
     MIN_SELL_PRICE: 10,
     MAX_SELL_PRICE: 10000,
@@ -21,7 +21,6 @@ try {
         tg.expand();
         tg.ready();
         
-        // Получаем данные из Telegram
         const initData = tg.initDataUnsafe;
         userId = initData?.user?.id?.toString();
         username = initData?.user?.username || 
@@ -77,7 +76,9 @@ const Utils = {
     },
     
     getCardImageUrl(cardId) {
-        return `images/card${cardId}.png`;
+        // Увеличиваем количество карт до 20
+        const actualCardId = ((cardId - 1) % 20) + 1;
+        return `images/card${actualCardId}.png`;
     },
     
     createCardImage(cardId, width = '100%', height = '140px') {
@@ -94,13 +95,46 @@ const Utils = {
         const imageUrl = this.getCardImageUrl(cardId);
         img.src = imageUrl;
         
-        // Fallback на placeholder
+        // Fallback на SVG если картинки нет
         img.onerror = function() {
             this.onerror = null;
-            this.src = `https://via.placeholder.com/${isMobile ? '120x160' : '150x200'}/1e293b/ffffff?text=Card+${cardId}`;
-        };
+            const svg = this.generateCardSVG(cardId);
+            this.src = 'data:image/svg+xml;base64,' + btoa(svg);
+        }.bind(this);
         
         return img;
+    },
+    
+    generateCardSVG(cardId) {
+        const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
+        const bgColor = colors[(cardId - 1) % colors.length];
+        const emojis = ['🃏', '🎴', '👑', '⚔️', '🛡️', '🏹', '🔮', '💎', '🌟', '🔥'];
+        const emoji = emojis[(cardId - 1) % emojis.length];
+        
+        return `
+            <svg width="150" height="200" xmlns="http://www.w3.org/2000/svg">
+                <rect width="150" height="200" rx="10" ry="10" fill="${bgColor}"/>
+                <rect x="5" y="5" width="140" height="190" rx="8" ry="8" fill="#1E293B" stroke="#475569" stroke-width="1"/>
+                <text x="75" y="50" text-anchor="middle" fill="white" font-family="Arial" font-size="16" font-weight="bold">
+                    CARD #${cardId}
+                </text>
+                <text x="75" y="100" text-anchor="middle" font-size="40">
+                    ${emoji}
+                </text>
+                <text x="75" y="160" text-anchor="middle" fill="${this.getRarityColor(this.getRarityByCardId(cardId))}" 
+                      font-family="Arial" font-size="14" font-weight="bold">
+                    ${this.getRarityByCardId(cardId).toUpperCase()}
+                </text>
+            </svg>
+        `;
+    },
+    
+    getRarityByCardId(cardId) {
+        if (cardId <= 5) return 'common';
+        if (cardId <= 10) return 'rare';
+        if (cardId <= 15) return 'epic';
+        if (cardId <= 20) return 'legendary';
+        return 'mythic';
     },
     
     showNotification(message, type = 'info') {
@@ -137,10 +171,6 @@ const Utils = {
     
     generateCardId() {
         return 'card_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-    },
-    
-    generateListingId() {
-        return 'listing_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
     }
 };
 
@@ -188,390 +218,167 @@ if (!document.querySelector('#app-styles')) {
     document.head.appendChild(style);
 }
 
-// ========== API КЛИЕНТ ==========
+// ========== API КЛИЕНТ (ТОЛЬКО СЕРВЕРНЫЕ ВЫЗОВЫ) ==========
 const API = {
     async checkOnlineStatus() {
         try {
-            const response = await fetch(`${CONFIG.BACKEND_URL}/api/debug/ping`, {
-                method: 'GET',
-                headers: { 'Accept': 'application/json' }
-            });
+            const response = await fetch(`${CONFIG.BACKEND_URL}/api/debug/ping`);
             return response.ok;
         } catch (error) {
-            console.warn('⚠️ Сервер недоступен:', error.message);
+            console.log('Сервер недоступен:', error.message);
             return false;
         }
     },
     
-    async loadUserDataFromServer() {
+    async loadUserData() {
         try {
-            console.log(`📡 Загрузка данных пользователя ${userId} с сервера...`);
-            const response = await fetch(`${CONFIG.BACKEND_URL}/api/user/${userId}`, {
-                method: 'GET',
-                headers: { 'Accept': 'application/json' }
-            });
+            console.log(`Загружаю данные пользователя ${userId}...`);
+            const response = await fetch(`${CONFIG.BACKEND_URL}/api/user/${userId}`);
             
             if (response.ok) {
                 const data = await response.json();
-                console.log('✅ Данные пользователя получены с сервера');
+                console.log('Данные пользователя загружены:', data);
                 return data;
             }
-            throw new Error(`Ошибка сервера: ${response.status}`);
+            throw new Error(`Ошибка ${response.status}`);
         } catch (error) {
-            console.warn('⚠️ Ошибка загрузки с сервера:', error.message);
+            console.warn('Не удалось загрузить данные:', error.message);
             return null;
         }
     },
     
-    async saveUserDataToServer(data) {
+    async saveUserData(data) {
         try {
-            console.log('📡 Сохранение данных на сервер...');
+            console.log('Сохранение данных пользователя...');
             const response = await fetch(`${CONFIG.BACKEND_URL}/api/user/${userId}`, {
                 method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data)
             });
             
             if (response.ok) {
                 const result = await response.json();
-                console.log('✅ Данные сохранены на сервер');
+                console.log('Данные сохранены:', result);
                 return result.success;
             }
-            throw new Error(`Ошибка сервера: ${response.status}`);
+            throw new Error(`Ошибка ${response.status}`);
         } catch (error) {
-            console.warn('⚠️ Ошибка сохранения на сервер:', error.message);
+            console.warn('Не удалось сохранить данные:', error.message);
             return false;
         }
     },
     
-    async loadMarketFromServer() {
+    async loadMarket() {
         try {
-            console.log('🛒 Загрузка маркета с сервера...');
-            const response = await fetch(`${CONFIG.BACKEND_URL}/api/market`, {
-                method: 'GET',
-                headers: { 'Accept': 'application/json' }
-            });
+            console.log('Загружаю маркет...');
+            const response = await fetch(`${CONFIG.BACKEND_URL}/api/market`);
             
             if (response.ok) {
                 const data = await response.json();
-                console.log(`✅ Получено ${data.length} лотов с сервера`);
+                console.log(`Загружено ${data.length} лотов`);
                 return data;
             }
-            throw new Error(`Ошибка сервера: ${response.status}`);
+            throw new Error(`Ошибка ${response.status}`);
         } catch (error) {
-            console.warn('⚠️ Ошибка загрузки маркета:', error.message);
-            return null;
+            console.warn('Не удалось загрузить маркет:', error.message);
+            return [];
         }
     },
     
-    async createListingOnServer(card, price) {
+    async createListing(card, price) {
         try {
-            console.log('📤 Создание лота на сервере...');
+            console.log('Создание лота на маркете...', { card, price });
             const response = await fetch(`${CONFIG.BACKEND_URL}/api/market/list`, {
                 method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     sellerId: userId,
-                    sellerName: username, // Используем реальный username из Telegram
+                    sellerName: username,
                     cardId: card.cardId,
                     rarity: card.rarity,
-                    price: price,
-                    cardData: card // Отправляем полные данные карты
+                    price: price
                 })
             });
             
             if (response.ok) {
                 const result = await response.json();
-                console.log('✅ Лот создан на сервере');
+                console.log('Лот создан:', result);
                 return result.listing;
             }
             
             const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.error || `Ошибка сервера: ${response.status}`);
+            throw new Error(errorData.error || `Ошибка ${response.status}`);
         } catch (error) {
-            console.warn('⚠️ Ошибка создания лота:', error.message);
+            console.warn('Не удалось создать лот:', error.message);
             throw error;
         }
     },
     
-    async buyListingOnServer(listingId) {
+    async buyListing(listingId) {
         try {
-            console.log(`🛒 Покупка лота ${listingId} на сервере...`);
+            console.log(`Покупаю лот ${listingId}...`);
             const response = await fetch(`${CONFIG.BACKEND_URL}/api/market/buy`, {
                 method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     buyerId: userId,
-                    buyerName: username,
                     listingId: listingId
                 })
             });
             
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.error || `Ошибка сервера: ${response.status}`);
+                throw new Error(errorData.error || `Ошибка ${response.status}`);
             }
             
             const result = await response.json();
-            console.log('✅ Покупка обработана на сервере');
+            console.log('Покупка успешна:', result);
             return result;
         } catch (error) {
-            console.warn('⚠️ Ошибка покупки:', error.message);
+            console.warn('Не удалось купить лот:', error.message);
             throw error;
         }
     }
 };
 
-// ========== ХРАНЕНИЕ ДАННЫХ ==========
-const Storage = {
-    getStorageKey() {
-        return `card_game_${userId}`;
-    },
-    
-    getMarketKey() {
-        return `card_game_market`;
-    },
-    
-    async saveData() {
+// ========== КЭШ (ТОЛЬКО ДЛЯ ОФЛАЙН-РЕЖИМА) ==========
+const Cache = {
+    saveUserData(data) {
         try {
-            const dataToSave = {
-                ...userData,
-                lastSync: new Date().toISOString(),
-                username: username
+            const cacheKey = `user_cache_${userId}`;
+            const cacheData = {
+                ...data,
+                cachedAt: new Date().toISOString()
             };
-            
-            // Сохраняем локально
-            localStorage.setItem(this.getStorageKey(), JSON.stringify(dataToSave));
-            console.log('💾 Данные пользователя сохранены локально');
-            
-            // Пробуем сохранить на сервер
-            if (isOnline) {
-                try {
-                    await API.saveUserDataToServer(dataToSave);
-                } catch (serverError) {
-                    console.warn('⚠️ Не удалось сохранить на сервер:', serverError.message);
-                }
-            }
-            
-            return true;
+            localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+            console.log('Данные сохранены в кэш');
         } catch (error) {
-            console.error('❌ Ошибка сохранения:', error);
-            return false;
+            console.warn('Не удалось сохранить в кэш:', error);
         }
     },
     
-    async saveMarket() {
+    loadUserData() {
         try {
-            // Сохраняем маркет локально (только демо-лоты)
-            const demoListings = marketListings.filter(listing => listing.isDemo);
-            const marketData = {
-                listings: demoListings,
-                lastUpdate: new Date().toISOString()
-            };
-            
-            localStorage.setItem(this.getMarketKey(), JSON.stringify(marketData));
-            console.log('💾 Данные маркета сохранены локально (только демо)');
-            
-            return true;
-        } catch (error) {
-            console.error('❌ Ошибка сохранения маркета:', error);
-            return false;
-        }
-    },
-    
-    async loadData() {
-        try {
-            console.log('📥 Загрузка данных пользователя...');
-            
-            // 1. Пробуем загрузить с сервера
-            let serverData = null;
-            if (isOnline) {
-                serverData = await API.loadUserDataFromServer();
-            }
-            
-            // 2. Загружаем локальные данные
-            const localData = this.loadLocalData();
-            
-            // 3. Синхронизируем
-            let finalData;
-            if (serverData && localData) {
-                // Синхронизация: берем лучшие значения
-                finalData = this.syncData(serverData, localData);
-            } else if (serverData) {
-                finalData = serverData;
-            } else if (localData) {
-                finalData = localData;
-            } else {
-                // Создаем новые данные
-                finalData = this.getInitialData();
-            }
-            
-            return finalData;
-            
-        } catch (error) {
-            console.error('❌ Ошибка загрузки данных:', error);
-            return this.getInitialData();
-        }
-    },
-    
-    syncData(serverData, localData) {
-        console.log('🔄 Синхронизация данных...');
-        
-        return {
-            // Берем максимальный баланс
-            balance: Math.max(
-                serverData.balance || 0,
-                localData.balance || 0,
-                CONFIG.INITIAL_BALANCE
-            ),
-            
-            // Объединяем карты
-            cards: this.mergeCards(serverData.cards || [], localData.cards || []),
-            
-            // Берем максимальное количество кликов
-            farmStats: {
-                totalClicks: Math.max(
-                    serverData.farmStats?.totalClicks || 0,
-                    localData.farmStats?.totalClicks || 0,
-                    0
-                )
-            },
-            
-            // Метаданные
-            username: username,
-            lastSync: new Date().toISOString()
-        };
-    },
-    
-    mergeCards(serverCards, localCards) {
-        const cardMap = new Map();
-        
-        // Добавляем все карты в Map (по ID)
-        [...serverCards, ...localCards].forEach(card => {
-            if (card.id) {
-                cardMap.set(card.id, card);
-            }
-        });
-        
-        return Array.from(cardMap.values());
-    },
-    
-    async loadMarket() {
-        try {
-            console.log('📥 Загрузка маркета...');
-            
-            let serverMarket = [];
-            let localMarket = [];
-            
-            // 1. Пробуем загрузить с сервера
-            if (isOnline) {
-                serverMarket = await API.loadMarketFromServer() || [];
-            }
-            
-            // 2. Загружаем локальный маркет (только демо)
-            const localData = this.loadLocalMarket();
-            if (localData && localData.listings) {
-                localMarket = localData.listings;
-            }
-            
-            // 3. Объединяем: реальные лоты с сервера + демо лоты
-            const realListings = serverMarket.filter(listing => !listing.isDemo);
-            const demoListings = localMarket.filter(listing => listing.isDemo);
-            
-            // Убираем дубликаты демо-лотов
-            const uniqueDemoListings = demoListings.filter(demoListing => 
-                !realListings.some(realListing => realListing.id === demoListing.id)
-            );
-            
-            const combinedMarket = [...realListings, ...uniqueDemoListings];
-            console.log(`✅ Маркет загружен: ${realListings.length} реальных + ${uniqueDemoListings.length} демо = ${combinedMarket.length} лотов`);
-            
-            return combinedMarket;
-            
-        } catch (error) {
-            console.error('❌ Ошибка загрузки маркета:', error);
-            // Возвращаем демо-лоты
-            return this.generateDemoListings(15);
-        }
-    },
-    
-    loadLocalData() {
-        try {
-            const data = localStorage.getItem(this.getStorageKey());
+            const cacheKey = `user_cache_${userId}`;
+            const data = localStorage.getItem(cacheKey);
             return data ? JSON.parse(data) : null;
         } catch (error) {
-            console.error('❌ Ошибка загрузки локальных данных:', error);
+            console.warn('Не удалось загрузить из кэша:', error);
             return null;
         }
     },
     
-    loadLocalMarket() {
+    clearCache() {
         try {
-            const data = localStorage.getItem(this.getMarketKey());
-            return data ? JSON.parse(data) : null;
+            localStorage.removeItem(`user_cache_${userId}`);
+            console.log('Кэш очищен');
         } catch (error) {
-            console.error('❌ Ошибка загрузки локального маркета:', error);
-            return null;
+            console.warn('Не удалось очистить кэш:', error);
         }
-    },
-    
-    getInitialData() {
-        return {
-            balance: CONFIG.INITIAL_BALANCE,
-            cards: [],
-            farmStats: { totalClicks: 0 },
-            username: username,
-            lastSync: new Date().toISOString()
-        };
-    },
-    
-    generateDemoListings(count) {
-        const listings = [];
-        const usernames = ['alex_tg', 'maria_tg', 'dima_tg', 'anna_tg', 'serg_tg', 'olga_tg', 'ivan_tg', 'kate_tg'];
-        
-        for (let i = 0; i < count; i++) {
-            const cardId = Math.floor(Math.random() * 10) + 1;
-            const rarities = ['common', 'common', 'rare', 'epic', 'legendary'];
-            const rarity = rarities[Math.floor(Math.random() * rarities.length)];
-            const price = this.calculatePrice(rarity, cardId);
-            
-            listings.push({
-                id: Utils.generateListingId(),
-                sellerId: `seller_${i}`,
-                sellerName: usernames[Math.floor(Math.random() * usernames.length)],
-                cardId: cardId,
-                rarity: rarity,
-                price: price,
-                isDemo: true,
-                createdAt: new Date().toISOString()
-            });
-        }
-        
-        console.log(`🎲 Сгенерировано ${listings.length} демо-лотков`);
-        return listings;
-    },
-    
-    calculatePrice(rarity, cardId) {
-        const base = {
-            common: 50,
-            rare: 200,
-            epic: 500,
-            legendary: 1000
-        };
-        return Math.floor((base[rarity] || 50) * (1 + cardId / 20));
     }
 };
 
-// ========== РУЛЕТКА (8 СЕКУНД АНИМАЦИЯ) ==========
+// ========== РУЛЕТКА ==========
 const Roulette = {
     show() {
         return new Promise((resolve) => {
@@ -581,16 +388,13 @@ const Roulette = {
             const title = document.getElementById('rouletteTitle');
             const closeBtn = document.getElementById('closeRoulette');
             
-            // Показываем контейнер
             container.style.display = 'block';
             title.textContent = '🎰 ОТКРЫТИЕ ПАКА';
             resultText.innerHTML = '🎮 <b>ГОТОВИМ РУЛЕТКУ...</b>';
             closeBtn.style.display = 'none';
             
-            // Очищаем предыдущую рулетку
             rouletteDiv.innerHTML = '';
             
-            // Создаем прогресс-бар
             const progressBar = document.createElement('div');
             progressBar.style.cssText = `
                 width: 100%;
@@ -613,7 +417,6 @@ const Roulette = {
             progressBar.appendChild(progressFill);
             rouletteDiv.parentNode.insertBefore(progressBar, rouletteDiv.nextSibling);
             
-            // Создаем трек для карточек
             const track = document.createElement('div');
             track.style.cssText = `
                 display: flex;
@@ -623,10 +426,10 @@ const Roulette = {
                 will-change: transform;
             `;
             
-            // Добавляем 40 карточек для плавной анимации
+            // 40 карточек для анимации (20 уникальных карт)
             const totalCards = 40;
             for (let i = 0; i < totalCards; i++) {
-                const cardId = (i % 10) + 1;
+                const cardId = (i % 20) + 1; // 20 карт
                 const img = Utils.createCardImage(cardId, '160px', '190px');
                 img.style.margin = '0 15px';
                 img.style.width = '160px';
@@ -639,32 +442,26 @@ const Roulette = {
             
             rouletteDiv.appendChild(track);
             
-            // Запускаем анимацию через 1 секунду
             setTimeout(() => {
                 resultText.innerHTML = '🎡 <b>РУЛЕТКА ЗАПУЩЕНА!</b>';
                 
-                // Выбираем победителя
                 const winnerIndex = 25 + Math.floor(Math.random() * 10);
-                const winnerCardId = (winnerIndex % 10) + 1;
+                const winnerCardId = (winnerIndex % 20) + 1; // 20 карт
                 const rarities = ['common', 'common', 'rare', 'epic', 'legendary'];
                 const rarity = rarities[Math.floor(Math.random() * rarities.length)];
                 
-                // Рассчитываем позицию для остановки
-                const cardWidth = 160 + 30; // ширина карты + margin
+                const cardWidth = 160 + 30;
                 const targetPosition = -(winnerIndex * cardWidth) + (rouletteDiv.offsetWidth / 2) - (cardWidth / 2);
                 
-                // Запускаем анимацию прогресс-бара
                 let progress = 0;
                 const progressInterval = setInterval(() => {
-                    progress += 1.25; // 100% за 8 секунд (8000ms / 100 = 80ms за 1%)
+                    progress += 1.25;
                     progressFill.style.width = `${Math.min(100, progress)}%`;
-                }, 100); // Обновляем каждые 100ms
+                }, 100);
                 
-                // Запускаем анимацию рулетки
                 track.style.transition = 'transform 8s cubic-bezier(0.2, 0.8, 0.2, 1)';
                 track.style.transform = `translateX(${targetPosition}px)`;
                 
-                // Таймер обратного отсчета
                 let secondsLeft = 8;
                 const countdownInterval = setInterval(() => {
                     secondsLeft--;
@@ -673,20 +470,16 @@ const Roulette = {
                     }
                 }, 1000);
                 
-                // После 8 секунд показываем результат
                 setTimeout(() => {
                     clearInterval(progressInterval);
                     clearInterval(countdownInterval);
                     
-                    // Подсвечиваем победившую карту
                     const cards = track.querySelectorAll('.roulette-card');
                     if (cards[winnerIndex]) {
                         const winnerCard = cards[winnerIndex];
                         winnerCard.style.border = '4px solid #f59e0b';
                         winnerCard.style.boxShadow = '0 0 40px #f59e0b';
                         winnerCard.style.animation = 'rouletteHighlight 0.8s infinite alternate';
-                        
-                        // Анимация прыжка
                         winnerCard.style.transform = 'translateY(-20px)';
                         setTimeout(() => {
                             winnerCard.style.transform = 'translateY(0)';
@@ -694,7 +487,6 @@ const Roulette = {
                         }, 300);
                     }
                     
-                    // Создаем выигранную карту
                     const wonCard = {
                         id: Utils.generateCardId(),
                         cardId: winnerCardId,
@@ -704,7 +496,6 @@ const Roulette = {
                         obtainedAt: new Date().toISOString()
                     };
                     
-                    // Показываем результат с эмодзи
                     const rarityEmoji = {
                         common: '⚪',
                         rare: '🔵',
@@ -731,46 +522,15 @@ const Roulette = {
                     `;
                     
                     title.textContent = '🏆 ПОБЕДА!';
-                    
-                    // Показываем кнопку закрытия
                     closeBtn.style.display = 'inline-block';
                     closeBtn.textContent = '🎴 ЗАБРАТЬ КАРТУ';
                     
-                    // Воспроизводим звук победы
-                    this.playWinSound();
-                    
                     resolve(wonCard);
                     
-                }, 8000); // 8 секунд анимации
+                }, 8000);
                 
-            }, 1000); // Задержка перед стартом
+            }, 1000);
         });
-    },
-    
-    playWinSound() {
-        try {
-            // Создаем звуковой контекст
-            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            const oscillator = audioContext.createOscillator();
-            const gainNode = audioContext.createGain();
-            
-            oscillator.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-            
-            // Настройки звука
-            oscillator.frequency.setValueAtTime(523.25, audioContext.currentTime); // C5
-            oscillator.frequency.setValueAtTime(659.25, audioContext.currentTime + 0.1); // E5
-            oscillator.frequency.setValueAtTime(783.99, audioContext.currentTime + 0.2); // G5
-            
-            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-            
-            oscillator.start(audioContext.currentTime);
-            oscillator.stop(audioContext.currentTime + 0.5);
-            
-        } catch (e) {
-            console.log('Звук не доступен');
-        }
     },
     
     close() {
@@ -917,7 +677,6 @@ const UI = {
                 ${otherListings.slice(0, 20).map(listing => {
                     const canBuy = userData.balance >= listing.price;
                     const cardImage = Utils.createCardImage(listing.cardId);
-                    const isDemo = listing.isDemo;
                     
                     return `
                     <div style="
@@ -950,7 +709,7 @@ const UI = {
                             </div>
                             <div style="font-size: 12px; color: #94a3b8;">
                                 💁 Продавец: <b>@${listing.sellerName}</b>
-                                ${isDemo ? ' <span style="color:#f59e0b">(демо)</span>' : ''}
+                                ${listing.isDemo ? ' <span style="color:#f59e0b">(демо)</span>' : ''}
                             </div>
                         </div>
                         <div style="
@@ -996,7 +755,7 @@ const UI = {
 
 // ========== ОСНОВНЫЕ ФУНКЦИИ ==========
 async function sellCard(cardId) {
-    console.log('🛒 Попытка продажи карты:', cardId);
+    console.log('🛒 Продажа карты:', cardId);
     
     const card = userData.cards.find(c => c.id === cardId);
     if (!card) {
@@ -1004,7 +763,6 @@ async function sellCard(cardId) {
         return;
     }
     
-    // Определяем цену в зависимости от редкости
     const basePrice = {
         'common': 50,
         'rare': 200,
@@ -1015,8 +773,7 @@ async function sellCard(cardId) {
     const suggestedPrice = basePrice[card.rarity] || 50;
     
     const priceInput = prompt(
-        `💰 ВЫСТАВЛЕНИЕ НА ПРОДАЖУ\n\n` +
-        `Карта: ${card.rarity.toUpperCase()} #${card.cardId}\n` +
+        `💰 ВЫСТАВЛЕНИЕ НА ПРОДАЖУ\n\nКарта: ${card.rarity.toUpperCase()} #${card.cardId}\n` +
         `Минимум: ${CONFIG.MIN_SELL_PRICE} хериков\n` +
         `Максимум: ${CONFIG.MAX_SELL_PRICE} хериков\n\n` +
         `Рекомендуемая цена: ${suggestedPrice} хериков\n` +
@@ -1025,235 +782,132 @@ async function sellCard(cardId) {
     );
     
     if (!priceInput) {
-        console.log('❌ Продажа отменена пользователем');
+        console.log('❌ Продажа отменена');
         return;
     }
     
     const price = parseInt(priceInput);
     if (isNaN(price) || price < CONFIG.MIN_SELL_PRICE || price > CONFIG.MAX_SELL_PRICE) {
-        Utils.showNotification(
-            `❌ Цена должна быть от ${CONFIG.MIN_SELL_PRICE} до ${CONFIG.MAX_SELL_PRICE} хериков!`, 
-            'error'
-        );
+        Utils.showNotification(`❌ Цена должна быть от ${CONFIG.MIN_SELL_PRICE} до ${CONFIG.MAX_SELL_PRICE} хериков!`, 'error');
         return;
     }
     
-    if (!confirm(`🎴 Выставить карту #${card.cardId} на продажу за ${Utils.formatNumber(price)} хериков?\n\nПродавец: @${username}\n\nКарта появится на общем маркете для всех игроков!`)) {
+    if (!confirm(`🎴 Выставить карту #${card.cardId} на продажу за ${Utils.formatNumber(price)} хериков?\n\nПродавец: @${username}`)) {
         return;
     }
     
     Utils.showNotification('🔄 Создаем лот на онлайн-маркете...', 'info');
     
     try {
-        // Пробуем создать лот на сервере
-        const listing = await API.createListingOnServer(card, price);
+        // ВАЖНО: ТОЛЬКО СЕРВЕРНЫЙ ВЫЗОВ
+        const listing = await API.createListing(card, price);
         
-        if (listing) {
-            // Удаляем карту у пользователя
-            userData.cards = userData.cards.filter(c => c.id !== cardId);
-            
-            // Добавляем лот в маркет (помечаем как реальный)
-            listing.isDemo = false;
-            marketListings.push(listing);
-            
-            // Обновляем интерфейс
-            UI.displayUserCards();
-            UI.displayMarket();
-            
-            // Сохраняем данные
-            await Storage.saveData();
-            
-            Utils.showNotification(
-                `✅ Карта выставлена на онлайн-маркет за ${Utils.formatNumber(price)} хериков!\nТеперь другие игроки могут её купить!`, 
-                'success'
-            );
-        } else {
-            throw new Error('Не удалось создать лот на сервере');
+        if (!listing) {
+            throw new Error('Сервер не ответил');
         }
         
-    } catch (error) {
-        console.error('❌ Ошибка при создании лота на сервере:', error);
-        
-        // Пробуем локальный вариант
-        Utils.showNotification('⚠️ Сервер недоступен, сохраняем локально...', 'warning');
-        
-        const localListing = {
-            id: Utils.generateListingId(),
-            sellerId: userId,
-            sellerName: username,
-            cardId: card.cardId,
-            rarity: card.rarity,
-            price: price,
-            isDemo: false,
-            originalCardId: card.id,
-            createdAt: new Date().toISOString(),
-            cardData: card
-        };
-        
-        // Удаляем карту у пользователя
+        // Удаляем карту у себя
         userData.cards = userData.cards.filter(c => c.id !== cardId);
-        
-        // Добавляем в локальный маркет
-        marketListings.push(localListing);
         
         // Обновляем интерфейс
         UI.displayUserCards();
+        
+        // Загружаем свежий маркет с сервера
+        marketListings = await API.loadMarket();
         UI.displayMarket();
         
-        // Сохраняем локально
-        await Storage.saveData();
-        await Storage.saveMarket();
+        // Сохраняем данные на сервер
+        const saveSuccess = await API.saveUserData(userData);
+        if (saveSuccess) {
+            Cache.saveUserData(userData);
+        }
         
         Utils.showNotification(
-            `✅ Карта выставлена локально за ${Utils.formatNumber(price)} хериков!\n(Онлайн-маркет недоступен)`, 
+            `✅ Карта выставлена на онлайн-маркет за ${Utils.formatNumber(price)} хериков!\n` +
+            `Другие игроки увидят её через несколько секунд.`, 
             'success'
+        );
+        
+    } catch (error) {
+        console.error('❌ Ошибка продажи:', error);
+        Utils.showNotification(
+            `❌ Не удалось выставить карту на маркет.\nПроверьте подключение к серверу.`, 
+            'error'
         );
     }
 }
 
 async function buyMarketCard(listingId) {
-    console.log('🛒 Попытка покупки лота:', listingId);
+    console.log('🛒 Покупка лота:', listingId);
+    
+    const listing = marketListings.find(l => l.id === listingId);
+    if (!listing) {
+        Utils.showNotification('❌ Лот не найден! Возможно, его уже купили.', 'error');
+        return;
+    }
+    
+    if (listing.sellerId === userId) {
+        Utils.showNotification('❌ Нельзя купить свою же карту!', 'error');
+        return;
+    }
+    
+    if (userData.balance < listing.price) {
+        Utils.showNotification(
+            `❌ Недостаточно хериков!\nНужно: ${listing.price}\nУ вас: ${userData.balance}`, 
+            'error'
+        );
+        return;
+    }
+    
+    if (!confirm(`🛒 Покупка карты #${listing.cardId}\n\n` +
+                 `Продавец: @${listing.sellerName}\n` +
+                 `Цена: ${Utils.formatNumber(listing.price)} хериков\n\n` +
+                 `Подтверждаете покупку?`)) {
+        return;
+    }
+    
+    Utils.showNotification('🔄 Обрабатываем покупку...', 'info');
     
     try {
-        const listing = marketListings.find(l => l.id === listingId);
-        if (!listing) {
-            Utils.showNotification('❌ Лот не найден! Возможно, его уже купили.', 'error');
-            return;
+        // ВАЖНО: ТОЛЬКО СЕРВЕРНЫЙ ВЫЗОВ
+        const result = await API.buyListing(listingId);
+        
+        if (!result || !result.success) {
+            throw new Error(result?.error || 'Ошибка покупки');
         }
         
-        // Проверяем, не покупаем ли свою же карту
-        if (listing.sellerId === userId) {
-            Utils.showNotification('❌ Нельзя купить свою же карту!', 'error');
-            return;
+        // Обновляем баланс
+        userData.balance = result.newBalance;
+        
+        // Добавляем карту
+        userData.cards.push(result.card);
+        
+        // Обновляем интерфейс
+        UI.updateProfile();
+        UI.displayUserCards();
+        
+        // Обновляем маркет с сервера
+        marketListings = await API.loadMarket();
+        UI.displayMarket();
+        
+        // Сохраняем данные на сервер
+        const saveSuccess = await API.saveUserData(userData);
+        if (saveSuccess) {
+            Cache.saveUserData(userData);
         }
         
-        if (userData.balance < listing.price) {
-            Utils.showNotification(
-                `❌ Недостаточно хериков!\nНужно: ${listing.price}\nУ вас: ${userData.balance}`, 
-                'error'
-            );
-            return;
-        }
-        
-        const isDemoListing = listing.isDemo === true;
-        
-        if (!confirm(`🛒 Покупка карты #${listing.cardId}\n\n` +
-                     `Продавец: @${listing.sellerName}\n` +
-                     `Цена: ${Utils.formatNumber(listing.price)} хериков\n` +
-                     `${isDemoListing ? '(демо-лот)' : '(реальный лот с онлайн-маркета)'}\n\n` +
-                     `Подтверждаете покупку?`)) {
-            return;
-        }
-        
-        Utils.showNotification('🔄 Обрабатываем покупку...', 'info');
-        
-        try {
-            let result;
-            
-            if (isDemoListing) {
-                // Для демо-лотов обрабатываем локально
-                result = {
-                    success: true,
-                    newBalance: userData.balance - listing.price,
-                    card: {
-                        id: Utils.generateCardId(),
-                        cardId: listing.cardId,
-                        rarity: listing.rarity,
-                        name: `Карта #${listing.cardId} (демо)`,
-                        purchasedAt: new Date().toISOString(),
-                        purchasedFrom: listing.sellerId,
-                        purchasePrice: listing.price,
-                        isDemo: true
-                    }
-                };
-            } else {
-                // Для реальных лотов покупаем через сервер
-                result = await API.buyListingOnServer(listingId);
-            }
-            
-            if (result && result.success) {
-                // Обновляем баланс
-                userData.balance = result.newBalance || (userData.balance - listing.price);
-                
-                // Добавляем карту
-                const purchasedCard = result.card || {
-                    id: Utils.generateCardId(),
-                    cardId: listing.cardId,
-                    rarity: listing.rarity,
-                    name: `Карта #${listing.cardId}`,
-                    ownerId: userId,
-                    purchasedAt: new Date().toISOString(),
-                    purchasedFrom: listing.sellerId,
-                    purchasePrice: listing.price,
-                    isDemo: isDemoListing
-                };
-                
-                userData.cards.push(purchasedCard);
-                
-                // Удаляем лот из маркета
-                marketListings = marketListings.filter(l => l.id !== listingId);
-                
-                // Обновляем интерфейс
-                UI.updateProfile();
-                UI.displayUserCards();
-                UI.displayMarket();
-                
-                // Сохраняем данные
-                await Storage.saveData();
-                if (isDemoListing) {
-                    await Storage.saveMarket();
-                }
-                
-                Utils.showNotification(
-                    `🎉 Вы купили карту #${listing.cardId} за ${Utils.formatNumber(listing.price)} хериков!\n` +
-                    `Продавец: @${listing.sellerName}`, 
-                    'success'
-                );
-                
-            } else {
-                const errorMessage = result?.error || 'Не удалось купить карту';
-                Utils.showNotification(`❌ ${errorMessage}`, 'error');
-            }
-            
-        } catch (apiError) {
-            console.error('❌ Ошибка покупки:', apiError);
-            
-            // Если это демо-лот, все равно покупаем
-            if (isDemoListing) {
-                userData.balance -= listing.price;
-                
-                const demoCard = {
-                    id: Utils.generateCardId(),
-                    cardId: listing.cardId,
-                    rarity: listing.rarity,
-                    name: `Карта #${listing.cardId}`,
-                    purchasedAt: new Date().toISOString(),
-                    purchasedFrom: listing.sellerId,
-                    purchasePrice: listing.price,
-                    isDemo: true
-                };
-                
-                userData.cards.push(demoCard);
-                marketListings = marketListings.filter(l => l.id !== listingId);
-                
-                UI.updateProfile();
-                UI.displayUserCards();
-                UI.displayMarket();
-                await Storage.saveData();
-                await Storage.saveMarket();
-                
-                Utils.showNotification(
-                    `🎉 Вы купили демо-карту #${listing.cardId} за ${Utils.formatNumber(listing.price)} хериков!`, 
-                    'success'
-                );
-            } else {
-                Utils.showNotification(`❌ Ошибка покупки: ${apiError.message}`, 'error');
-            }
-        }
+        Utils.showNotification(
+            `🎉 Вы купили карту #${listing.cardId} за ${Utils.formatNumber(listing.price)} хериков!\n` +
+            `Херики переведены продавцу @${listing.sellerName}`, 
+            'success'
+        );
         
     } catch (error) {
-        console.error('❌ Критическая ошибка покупки:', error);
-        Utils.showNotification('❌ Произошла ошибка при покупке. Попробуйте позже.', 'error');
+        console.error('❌ Ошибка покупки:', error);
+        Utils.showNotification(
+            `❌ Не удалось купить карту: ${error.message}\nПроверьте подключение.`, 
+            'error'
+        );
     }
 }
 
@@ -1262,11 +916,9 @@ function initFarmButton() {
     const farmBtn = document.getElementById('farmHeriks');
     if (farmBtn) {
         farmBtn.addEventListener('click', async (e) => {
-            // Анимация кнопки
             farmBtn.style.animation = 'bounce 0.3s';
             setTimeout(() => farmBtn.style.animation = '', 300);
             
-            // Создаем эффект монетки
             const coin = document.createElement('div');
             coin.className = 'coin-popup';
             coin.textContent = '+1 💰';
@@ -1275,18 +927,18 @@ function initFarmButton() {
             document.body.appendChild(coin);
             setTimeout(() => coin.remove(), 1000);
             
-            // Обновляем данные
             userData.balance += 1;
             userData.farmStats.totalClicks = (userData.farmStats.totalClicks || 0) + 1;
             
-            // Обновляем интерфейс
             UI.updateProfile();
             
-            // Сохраняем данные
             try {
-                await Storage.saveData();
+                const saveSuccess = await API.saveUserData(userData);
+                if (saveSuccess) {
+                    Cache.saveUserData(userData);
+                }
             } catch (saveError) {
-                console.warn('Не удалось сохранить данные:', saveError);
+                console.warn('Не удалось сохранить на сервер:', saveError);
             }
         });
     }
@@ -1309,25 +961,22 @@ function initOpenPackButton() {
             openPackBtn.textContent = '⏳ ПОДГОТОВКА...';
             
             try {
-                // Списываем стоимость
                 userData.balance -= CONFIG.PACK_COST;
                 UI.updateProfile();
                 
-                // Показываем рулетку на 8 секунд
                 const wonCard = await Roulette.show();
-                
-                // Добавляем карту
                 userData.cards.push(wonCard);
                 
-                // Обновляем интерфейс
                 UI.displayUserCards();
                 
-                // Сохраняем данные
-                await Storage.saveData();
+                const saveSuccess = await API.saveUserData(userData);
+                if (saveSuccess) {
+                    Cache.saveUserData(userData);
+                }
                 
             } catch (error) {
                 console.error('Ошибка открытия пака:', error);
-                Utils.showNotification('❌ Ошибка при открытии пака. Попробуйте позже.', 'error');
+                Utils.showNotification('❌ Ошибка при открытии пака', 'error');
             } finally {
                 isOpeningPack = false;
                 openPackBtn.disabled = false;
@@ -1351,81 +1000,82 @@ async function initApp() {
     console.log('=== НАЧАЛО ЗАГРУЗКИ ===');
     
     try {
-        // Проверяем онлайн статус
         isOnline = await API.checkOnlineStatus();
-        console.log(`🌐 Онлайн статус: ${isOnline ? 'ПОДКЛЮЧЕН' : 'ОФЛАЙН'}`);
+        console.log(`🌐 Статус сервера: ${isOnline ? 'ОНЛАЙН' : 'ОФЛАЙН'}`);
         
-        // 1. Загружаем данные пользователя
-        userData = await Storage.loadData();
-        console.log('✅ Данные пользователя загружены');
+        if (isOnline) {
+            // Загружаем с сервера
+            userData = await API.loadUserData();
+            marketListings = await API.loadMarket();
+            
+            if (!userData) {
+                userData = {
+                    balance: CONFIG.INITIAL_BALANCE,
+                    cards: [],
+                    farmStats: { totalClicks: 0 },
+                    username: username
+                };
+            }
+            
+            Cache.saveUserData(userData);
+            
+        } else {
+            // Офлайн режим
+            Utils.showNotification('⚠️ Сервер недоступен. Работаем в офлайн-режиме.', 'warning');
+            userData = Cache.loadUserData() || {
+                balance: CONFIG.INITIAL_BALANCE,
+                cards: [],
+                farmStats: { totalClicks: 0 },
+                username: username
+            };
+            marketListings = [];
+        }
         
-        // 2. Загружаем маркет (реальные лоты + демо)
-        marketListings = await Storage.loadMarket();
-        console.log(`✅ Маркет загружен: ${marketListings.length} лотов`);
-        
-        // 3. Обновляем интерфейс
         UI.updateProfile();
         UI.displayUserCards();
         UI.displayMarket();
         
-        // 4. Инициализируем кнопки
         initFarmButton();
         initOpenPackButton();
         initCloseRouletteButton();
         
-        // 5. Обновляем маркет каждые 30 секунд (для онлайн режима)
+        // Автообновление маркета (только онлайн)
         if (isOnline) {
             setInterval(async () => {
                 try {
-                    const updatedMarket = await Storage.loadMarket();
-                    if (JSON.stringify(updatedMarket) !== JSON.stringify(marketListings)) {
-                        marketListings = updatedMarket;
+                    const newMarket = await API.loadMarket();
+                    if (JSON.stringify(newMarket) !== JSON.stringify(marketListings)) {
+                        marketListings = newMarket;
                         UI.displayMarket();
                         console.log('🔄 Маркет обновлен');
                     }
                 } catch (error) {
-                    console.warn('⚠️ Ошибка обновления маркета:', error);
+                    console.warn('Ошибка обновления маркета:', error);
                 }
-            }, 30000);
+            }, 10000); // Каждые 10 секунд
         }
-        
-        // 6. Автосохранение каждые 30 секунд
-        setInterval(async () => {
-            try {
-                await Storage.saveData();
-                console.log('💾 Фоновое сохранение выполнено');
-            } catch (error) {
-                console.warn('⚠️ Ошибка фонового сохранения:', error);
-            }
-        }, 30000);
-        
-        // 7. Сохраняем при закрытии вкладки
-        window.addEventListener('beforeunload', async () => {
-            try {
-                await Storage.saveData();
-            } catch (error) {
-                console.warn('Ошибка при сохранении перед закрытием:', error);
-            }
-        });
         
         console.log('=== ПРИЛОЖЕНИЕ УСПЕШНО ЗАГРУЖЕНО ===');
         
-        // Показываем приветствие
         setTimeout(() => {
             if (isOnline) {
                 Utils.showNotification(`👋 Добро пожаловать, @${username}!\n✅ Онлайн-маркет доступен`, 'success');
             } else {
-                Utils.showNotification(`👋 Добро пожаловать, @${username}!\n⚠️ Работаем в офлайн-режиме`, 'info');
+                Utils.showNotification(`👋 Добро пожаловать, @${username}!`, 'info');
             }
         }, 1000);
         
     } catch (error) {
         console.error('❌ Ошибка загрузки приложения:', error);
+        Utils.showNotification('⚠️ Ошибка загрузки приложения', 'error');
         
-        // Восстанавливаемся из localStorage
-        userData = Storage.loadLocalData() || Storage.getInitialData();
-        const marketData = Storage.loadLocalMarket();
-        marketListings = marketData?.listings || Storage.generateDemoListings(15);
+        userData = Cache.loadUserData() || {
+            balance: CONFIG.INITIAL_BALANCE,
+            cards: [],
+            farmStats: { totalClicks: 0 },
+            username: username
+        };
+        marketListings = [];
         
         UI.updateProfile();
         UI.displayUserCards();
@@ -1434,8 +1084,6 @@ async function initApp() {
         initFarmButton();
         initOpenPackButton();
         initCloseRouletteButton();
-        
-        Utils.showNotification(`👋 Добро пожаловать, @${username}!`, 'success');
     }
 }
 
