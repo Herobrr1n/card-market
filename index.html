@@ -3,72 +3,158 @@
 <head>
   <meta charset="UTF-8">
   <title>Card Market</title>
+  <!-- Мета-тег для адаптивности -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="stylesheet" href="style.css">
-</head>
-<body>
-  <h1>🎴 Card Market</h1>
-  
-  <!-- Профиль -->
-  <div id="profile" class="profile">
-    <span id="username">Загрузка...</span>
-    <span id="balance">0 хериков</span>
-  </div>
-  
-  <!-- Кнопка для фарма хериков -->
-  <div style="text-align: center; margin: 20px 0; padding: 15px; background: rgba(99, 102, 241, 0.1); border-radius: 10px;">
-    <h3 style="margin: 0 0 10px 0;">Фарм хериков</h3>
-    <button id="farmHeriks" style="padding: 15px 30px; font-size: 24px; border-radius: 50%; width: 70px; height: 70px;">
-      🖕🏿
-    </button>
-    <div id="farmCounter" style="margin-top: 10px; font-size: 14px; color: #94a3b8;">
-      Нажмите для получения хериков
-    </div>
-  </div>
-  
-  <!-- Кнопка открытия пака -->
-  <div style="text-align: center; margin: 30px 0;">
-    <button id="openPack" style="padding: 15px 30px; font-size: 18px;">
-      🎁 Открыть пак (50 хериков)
-    </button>
-  </div>
-  
-  <!-- Рулетка для открытия пака -->
-  <div id="rouletteContainer" style="display:none; text-align:center; margin: 30px 0; padding: 20px; background: #1e293b; border-radius: 10px;">
-    <h2 id="rouletteTitle">🎰 Рулетка</h2>
-    <div id="roulette" style="
-      width: 100%;
-      height: 200px;
-      overflow: hidden;
-      position: relative;
-      border: 3px solid #6366f1;
-      border-radius: 10px;
-      background: #0f172a;
-      margin: 20px 0;
-    ">
-      <!-- Рулетка здесь -->
-    </div>
-    <div id="rouletteResult" style="margin-top: 20px; padding: 15px; background: rgba(255, 255, 255, 0.1); border-radius: 10px;">
-      <p id="resultText">Крутим рулетку...</p>
-    </div>
-    <button id="closeRoulette" style="margin-top: 15px; padding: 10px 20px; display: none;">Закрыть</button>
-  </div>
-  
-  <!-- Полученные карты -->
-  <div id="cardsContainer" style="margin: 30px 0;">
-    <h2>📚 Ваши карты</h2>
-    <div id="myCards" style="margin-top: 15px;"></div>
-  </div>
-  
-  <!-- Маркет -->
-  <div id="marketContainer" style="margin: 30px 0;">
-    <h2>🏪 Маркет</h2>
-    <div id="market" style="margin-top: 15px;"></div>
-  </div>
-  
-  <script src="app.js"></script>
-  
   <style>
+    /* Базовые стили для адаптивности */
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+    
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: #0f172a;
+      color: #f1f5f9;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+      padding-bottom: max(20px, env(safe-area-inset-bottom));
+    }
+    
+    h1 {
+      text-align: center;
+      margin: 20px 0;
+      color: #e2e8f0;
+      font-size: 28px;
+    }
+    
+    h2 {
+      color: #cbd5e1;
+      margin: 20px 0 15px 0;
+      font-size: 22px;
+    }
+    
+    /* Профиль */
+    .profile {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #1e293b;
+      padding: 15px 20px;
+      border-radius: 12px;
+      margin: 20px 0;
+      border: 1px solid #334155;
+    }
+    
+    #username {
+      font-weight: bold;
+      color: #60a5fa;
+    }
+    
+    #balance {
+      font-weight: bold;
+      color: #fbbf24;
+      font-size: 18px;
+    }
+    
+    /* Кнопки */
+    button {
+      background: #4f46e5;
+      color: white;
+      border: none;
+      padding: 14px 28px;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: inline-block;
+      text-align: center;
+      width: 100%;
+      max-width: 300px;
+      margin: 5px auto;
+    }
+    
+    button:hover {
+      background: #4338ca;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+    }
+    
+    button:active {
+      transform: translateY(0);
+    }
+    
+    button:disabled {
+      background: #64748b;
+      cursor: not-allowed;
+      transform: none;
+    }
+    
+    /* Секции */
+    .section {
+      background: #1e293b;
+      border-radius: 12px;
+      padding: 20px;
+      margin: 25px 0;
+      border: 1px solid #334155;
+    }
+    
+    /* Карточки */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 15px;
+      margin-top: 15px;
+    }
+    
+    .card-item {
+      background: #1e293b;
+      border-radius: 10px;
+      padding: 12px;
+      text-align: center;
+      border: 2px solid;
+      transition: all 0.3s;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    
+    .card-item img {
+      width: 100%;
+      height: 140px;
+      object-fit: cover;
+      border-radius: 8px;
+      margin-bottom: 10px;
+    }
+    
+    /* Рулетка */
+    #rouletteContainer {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(15, 23, 42, 0.95);
+      z-index: 1000;
+      display: none;
+      padding: 20px;
+      overflow-y: auto;
+    }
+    
+    /* Анимации */
     @keyframes bounce {
       0%, 100% { transform: scale(1); }
       50% { transform: scale(1.2); }
@@ -105,28 +191,204 @@
       animation: bounce 0.5s infinite;
     }
     
-    /* Стили для карточек */
-    .card-item {
-      background: #1e293b;
+    /* Индикатор синхронизации */
+    #syncStatus {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      z-index: 10000;
+      font-size: 12px;
+      padding: 5px 10px;
       border-radius: 10px;
-      padding: 12px;
-      text-align: center;
-      border: 2px solid;
-      transition: transform 0.3s;
+      background: rgba(0,0,0,0.7);
+      color: white;
+      display: none;
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,0.1);
     }
     
-    .card-item:hover {
-      transform: translateY(-5px);
-      box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+    /* Мобильные стили */
+    @media (max-width: 768px) {
+      .container {
+        padding: 12px;
+        padding-bottom: max(12px, env(safe-area-inset-bottom));
+      }
+      
+      h1 {
+        font-size: 24px;
+        margin: 15px 0;
+      }
+      
+      h2 {
+        font-size: 20px;
+        margin: 15px 0 10px 0;
+      }
+      
+      .profile {
+        padding: 12px 15px;
+        margin: 15px 0;
+        flex-direction: column;
+        gap: 10px;
+        text-align: center;
+      }
+      
+      .cards-grid {
+        grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+        gap: 10px;
+      }
+      
+      .card-item {
+        padding: 10px;
+        min-height: 200px;
+      }
+      
+      .card-item img {
+        height: 120px;
+      }
+      
+      button {
+        padding: 16px 24px;
+        font-size: 16px;
+        min-height: 44px;
+        margin: 8px auto;
+        max-width: 100%;
+      }
+      
+      .section {
+        padding: 15px;
+        margin: 20px 0;
+      }
     }
     
-    .card-item img {
-      width: 100%;
-      height: 140px;
-      object-fit: cover;
-      border-radius: 8px;
-      margin-bottom: 10px;
+    @media (max-width: 480px) {
+      .cards-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      
+      .card-item {
+        min-width: 130px;
+      }
+      
+      h1 {
+        font-size: 22px;
+      }
+      
+      #farmHeriks {
+        width: 60px;
+        height: 60px;
+        font-size: 20px;
+      }
+    }
+    
+    /* Для тач-устройств */
+    @media (hover: none) and (pointer: coarse) {
+      button, .clickable {
+        min-height: 44px;
+        min-width: 44px;
+      }
+      
+      button:active {
+        transform: scale(0.95);
+        transition: transform 0.1s;
+      }
+      
+      .card-item:hover {
+        transform: none !important;
+      }
     }
   </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎴 Card Market</h1>
+    
+    <!-- Профиль -->
+    <div class="profile">
+      <span id="username">Загрузка...</span>
+      <span id="balance">0 хериков</span>
+    </div>
+    
+    <!-- Индикатор синхронизации -->
+    <div id="syncStatus"></div>
+    
+    <!-- Кнопка для фарма хериков -->
+    <div class="section">
+      <h3 style="text-align: center; margin: 0 0 15px 0;">Фарм хериков</h3>
+      <div style="text-align: center;">
+        <button id="farmHeriks" style="
+          padding: 0;
+          border-radius: 50%;
+          width: 70px;
+          height: 70px;
+          font-size: 24px;
+          margin: 10px auto;
+        ">
+          🖕🏿
+        </button>
+      </div>
+      <div id="farmCounter" style="
+        text-align: center;
+        margin-top: 15px;
+        font-size: 14px;
+        color: #94a3b8;
+        line-height: 1.5;
+      ">
+        Нажмите для получения хериков
+      </div>
+    </div>
+    
+    <!-- Кнопка открытия пака -->
+    <div class="section" style="text-align: center;">
+      <h3 style="margin: 0 0 15px 0;">Открыть карты</h3>
+      <button id="openPack">
+        🎁 Открыть пак (50 хериков)
+      </button>
+    </div>
+    
+    <!-- Рулетка для открытия пака -->
+    <div id="rouletteContainer">
+      <div style="max-width: 600px; margin: 0 auto;">
+        <h2 id="rouletteTitle" style="text-align: center; color: #fff;">🎰 Рулетка</h2>
+        <div id="roulette" style="
+          width: 100%;
+          height: 200px;
+          overflow: hidden;
+          position: relative;
+          border: 3px solid #6366f1;
+          border-radius: 10px;
+          background: #0f172a;
+          margin: 20px 0;
+        ">
+          <!-- Рулетка здесь -->
+        </div>
+        <div id="rouletteResult" style="
+          margin-top: 20px;
+          padding: 15px;
+          background: rgba(255, 255, 255, 0.1);
+          border-radius: 10px;
+          text-align: center;
+        ">
+          <p id="resultText" style="margin: 0; font-size: 16px;">Крутим рулетку...</p>
+        </div>
+        <div style="text-align: center; margin-top: 20px;">
+          <button id="closeRoulette" style="max-width: 200px;">Закрыть</button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Полученные карты -->
+    <div class="section">
+      <h2>📚 Ваши карты</h2>
+      <div id="myCards" class="cards-grid"></div>
+    </div>
+    
+    <!-- Маркет -->
+    <div class="section">
+      <h2>🏪 Маркет</h2>
+      <div id="market" class="cards-grid"></div>
+    </div>
+  </div>
+  
+  <script src="app.js"></script>
 </body>
 </html>

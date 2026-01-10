@@ -13,11 +13,13 @@ const DATA_VERSION = '1.0.1';
 console.log('=== ИНИЦИАЛИЗАЦИЯ ПРИЛОЖЕНИЯ ===');
 
 let tg, userId, username, isMobile = false;
+let saveTimeout = null;
 
 // Инициализация Telegram WebApp
 try {
     tg = window.Telegram?.WebApp;
     if (tg) {
+        console.log('✅ Telegram WebApp обнаружен');
         tg.expand();
         tg.ready();
         console.log('✅ Telegram WebApp инициализирован');
@@ -57,6 +59,7 @@ let userData = {
 
 let marketListings = [];
 let isOpeningPack = false;
+let isInitialized = false;
 
 // ========== ХРАНЕНИЕ ДАННЫХ С СИНХРОНИЗАЦИЕЙ ==========
 const Storage = {
@@ -127,41 +130,41 @@ const Storage = {
     // Сохранение данных в localStorage + синхронизация
     async saveData(data) {
         try {
-            SyncUI.showStatus('Сохранение...', 'loading');
+            console.log('💾 Начало сохранения данных...');
             
             // 1. Сохраняем локально
             const dataToSave = {
                 ...data,
                 lastSync: Date.now(),
-                deviceId: this.getDeviceId()
+                deviceId: this.getDeviceId(),
+                username: username
             };
             
             localStorage.setItem(this.getStorageKey(), JSON.stringify(dataToSave));
-            console.log('💾 Данные сохранены локально');
+            console.log('✅ Данные сохранены локально');
             
             // 2. Сохраняем на сервер для синхронизации
             let savedToServer = false;
             try {
                 savedToServer = await API.saveUserData(dataToSave);
+                console.log(savedToServer ? '✅ Данные сохранены на сервере' : '⚠️ Не удалось сохранить на сервере');
             } catch (serverError) {
-                console.warn('⚠️ Сервер недоступен для сохранения:', serverError);
+                console.warn('⚠️ Сервер недоступен для сохранения:', serverError.message);
             }
             
             // 3. Если есть Telegram, сохраняем в Cloud Storage
             if (window.Telegram?.WebApp?.CloudStorage) {
                 try {
                     await this.saveToTelegramCloud(dataToSave);
+                    console.log('✅ Данные сохранены в Telegram Cloud');
                 } catch (cloudError) {
-                    console.warn('⚠️ Ошибка сохранения в Telegram Cloud:', cloudError);
+                    console.warn('⚠️ Ошибка сохранения в Telegram Cloud:', cloudError.message);
                 }
             }
             
-            SyncUI.showStatus(savedToServer ? 'Прогресс сохранен!' : 'Сохранено локально', 
-                            savedToServer ? 'success' : 'info');
             return savedToServer || true;
         } catch (error) {
-            console.warn('⚠️ Ошибка сохранения:', error);
-            SyncUI.showStatus('Ошибка сохранения', 'error');
+            console.error('❌ Ошибка сохранения:', error);
             return false;
         }
     },
@@ -169,6 +172,7 @@ const Storage = {
     // Загрузка данных (с приоритетом: сервер > Telegram Cloud > localStorage)
     async loadData() {
         try {
+            console.log('📥 Начало загрузки данных...');
             let data = null;
             
             // 1. Пробуем загрузить с сервера
@@ -179,46 +183,39 @@ const Storage = {
                     data = serverData;
                     // Сохраняем локально для оффлайн-режима
                     localStorage.setItem(this.getStorageKey(), JSON.stringify(data));
+                    return data;
+                } else {
+                    console.log('🆕 На сервере нет данных пользователя');
                 }
             } catch (serverError) {
-                console.warn('⚠️ Сервер недоступен для загрузки:', serverError);
+                console.warn('⚠️ Сервер недоступен для загрузки:', serverError.message);
             }
             
-            // 2. Если с сервера не загрузилось, пробуем Telegram Cloud
-            if (!data && window.Telegram?.WebApp?.CloudStorage) {
-                const cloudData = await this.loadFromTelegramCloud();
-                if (cloudData) {
-                    console.log('✅ Данные загружены из Telegram Cloud');
-                    data = cloudData;
+            // 2. Если с сервера не загрузилось, пробуем localStorage
+            const localData = localStorage.getItem(this.getStorageKey());
+            if (localData) {
+                try {
+                    data = JSON.parse(localData);
+                    console.log('✅ Данные загружены из localStorage');
+                } catch (parseError) {
+                    console.warn('⚠️ Ошибка парсинга локальных данных:', parseError);
                 }
             }
             
-            // 3. Если все еще нет данных, пробуем localStorage
+            // 3. Если все еще нет данных, создаем начальные
             if (!data) {
-                const localData = localStorage.getItem(this.getStorageKey());
-                if (localData) {
-                    try {
-                        data = JSON.parse(localData);
-                        console.log('✅ Данные загружены из localStorage');
-                    } catch (parseError) {
-                        console.warn('⚠️ Ошибка парсинга локальных данных:', parseError);
-                    }
-                }
+                console.log('🆕 Созданы начальные данные');
+                data = this.getInitialData();
             }
             
             // 4. Миграция данных если нужно
-            if (data) {
-                data = await this.migrateData(data);
-                return data;
-            }
+            data = await this.migrateData(data);
+            return data;
             
         } catch (error) {
-            console.warn('⚠️ Ошибка загрузки данных:', error);
+            console.error('❌ Ошибка загрузки данных:', error);
+            return this.getInitialData();
         }
-        
-        // 5. Возвращаем начальные данные
-        console.log('🆕 Созданы начальные данные');
-        return this.getInitialData();
     },
     
     // Сохранение в Telegram Cloud Storage
@@ -229,9 +226,8 @@ const Storage = {
                 return;
             }
             
-            tg.CloudStorage.setItem(this.getStorageKey(), JSON.stringify(data), (err, result) => {
+            tg.CloudStorage.setItem(this.getStorageKey(), JSON.stringify(data), (err) => {
                 if (!err) {
-                    console.log('✅ Данные сохранены в Telegram Cloud');
                     resolve(true);
                 } else {
                     console.warn('⚠️ Ошибка сохранения в Telegram Cloud:', err);
@@ -241,32 +237,10 @@ const Storage = {
         });
     },
     
-    // Загрузка из Telegram Cloud Storage
-    async loadFromTelegramCloud() {
-        return new Promise((resolve) => {
-            if (!tg?.CloudStorage) {
-                resolve(null);
-                return;
-            }
-            
-            tg.CloudStorage.getItem(this.getStorageKey(), (err, value) => {
-                if (!err && value) {
-                    try {
-                        resolve(JSON.parse(value));
-                    } catch {
-                        resolve(null);
-                    }
-                } else {
-                    resolve(null);
-                }
-            });
-        });
-    },
-    
     // Синхронизация данных между устройствами
     async syncData() {
         try {
-            SyncUI.showStatus('Синхронизация...', 'loading');
+            console.log('🔄 Начало синхронизации...');
             
             // Загружаем с сервера (самые свежие данные)
             const serverData = await API.loadUserData();
@@ -276,6 +250,8 @@ const Storage = {
             
             // Если есть данные на сервере, объединяем их с локальными
             if (serverData && Object.keys(serverData).length > 0) {
+                console.log('🔄 Объединение данных сервера и локальных');
+                
                 // Приоритет: серверные данные за баланс и карты, локальные за статистику
                 mergedData = {
                     ...serverData,
@@ -287,82 +263,40 @@ const Storage = {
                         )
                     },
                     lastSync: Date.now(),
-                    deviceId: this.getDeviceId()
+                    deviceId: this.getDeviceId(),
+                    username: username
                 };
                 
                 // Объединяем карты (убираем дубликаты)
                 const allCards = [...(serverData.cards || []), ...(localData.cards || [])];
-                const uniqueCards = Array.from(new Map(allCards.map(card => [card.id, card])).values());
-                mergedData.cards = uniqueCards;
+                const cardMap = new Map();
+                allCards.forEach(card => {
+                    if (card.id && !cardMap.has(card.id)) {
+                        cardMap.set(card.id, card);
+                    }
+                });
+                mergedData.cards = Array.from(cardMap.values());
+                console.log(`🃏 Объединено карт: ${mergedData.cards.length}`);
                 
                 // Берем больший баланс
-                mergedData.balance = Math.max(serverData.balance || 0, localData.balance || 0);
+                mergedData.balance = Math.max(
+                    serverData.balance || 0, 
+                    localData.balance || 0,
+                    mergedData.balance || 0
+                );
             }
             
             // Сохраняем объединенные данные везде
-            await this.saveData(mergedData);
+            const saved = await this.saveData(mergedData);
+            if (saved) {
+                console.log('✅ Синхронизация завершена');
+            }
             
-            SyncUI.showStatus('Данные синхронизированы!', 'success');
             return mergedData;
             
         } catch (error) {
-            console.warn('⚠️ Ошибка синхронизации:', error);
-            SyncUI.showStatus('Ошибка синхронизации', 'error');
+            console.error('❌ Ошибка синхронизации:', error);
             return null;
-        }
-    }
-};
-
-// ========== ИНТЕРФЕЙС СИНХРОНИЗАЦИИ ==========
-const SyncUI = {
-    showStatus(text, type = 'info') {
-        // Создаем элемент если нет
-        let element = document.getElementById('syncStatus');
-        if (!element) {
-            element = document.createElement('div');
-            element.id = 'syncStatus';
-            element.style.cssText = `
-                position: fixed;
-                top: 10px;
-                right: 10px;
-                z-index: 10000;
-                font-size: ${isMobile ? '11px' : '12px'};
-                padding: ${isMobile ? '4px 8px' : '5px 10px'};
-                border-radius: 10px;
-                background: rgba(0,0,0,0.7);
-                color: white;
-                display: none;
-                backdrop-filter: blur(10px);
-                border: 1px solid rgba(255,255,255,0.1);
-            `;
-            document.body.appendChild(element);
-        }
-        
-        const colors = {
-            info: 'rgba(59, 130, 246, 0.9)',
-            success: 'rgba(34, 197, 94, 0.9)',
-            error: 'rgba(239, 68, 68, 0.9)',
-            loading: 'rgba(139, 92, 246, 0.9)',
-            warning: 'rgba(245, 158, 11, 0.9)'
-        };
-        
-        element.style.display = 'block';
-        element.style.background = colors[type] || colors.info;
-        element.innerHTML = type === 'loading' 
-            ? `<span>${text} <span class="loading-dots">...</span></span>`
-            : text;
-        
-        if (type !== 'loading') {
-            setTimeout(() => {
-                element.style.display = 'none';
-            }, 3000);
-        }
-    },
-    
-    hideStatus() {
-        const element = document.getElementById('syncStatus');
-        if (element) {
-            element.style.display = 'none';
         }
     }
 };
@@ -376,7 +310,8 @@ const API = {
             const response = await fetch(`${CONFIG.BACKEND_URL}/api/user/${userId}`, {
                 method: 'GET',
                 headers: { 
-                    'Accept': 'application/json'
+                    'Accept': 'application/json',
+                    'Cache-Control': 'no-cache'
                 }
             });
             
@@ -386,7 +321,7 @@ const API = {
                 return data;
             } else if (response.status === 404) {
                 console.log('🆕 Пользователь не найден на сервере');
-                return {};
+                return null;
             } else {
                 console.warn(`⚠️ Сервер вернул ошибку ${response.status}`);
                 throw new Error(`Server error: ${response.status}`);
@@ -410,7 +345,8 @@ const API = {
                 body: JSON.stringify({
                     ...data,
                     username: username,
-                    userId: userId
+                    userId: userId,
+                    lastUpdated: new Date().toISOString()
                 })
             });
             
@@ -422,7 +358,7 @@ const API = {
                 return false;
             }
         } catch (error) {
-            console.warn('⚠️ Не удалось сохранить данные на сервере:', error);
+            console.warn('⚠️ Не удалось сохранить данные на сервере:', error.message);
             return false;
         }
     },
@@ -431,16 +367,92 @@ const API = {
     async loadMarket() {
         try {
             console.log('🛒 Загрузка маркета...');
-            const response = await fetch(`${CONFIG.BACKEND_URL}/api/market`);
+            const response = await fetch(`${CONFIG.BACKEND_URL}/api/market`, {
+                headers: { 'Cache-Control': 'no-cache' }
+            });
             if (response.ok) {
                 const data = await response.json();
-                console.log('✅ Маркет загружен, лотов:', data.length);
+                console.log(`✅ Маркет загружен, лотов: ${data.length}`);
+                
+                // Генерируем 20 карт для демонстрации (если в маркете мало)
+                if (data.length < 20) {
+                    const generatedListings = this.generateMarketListings(20 - data.length);
+                    return [...data, ...generatedListings];
+                }
+                
                 return data;
+            } else {
+                console.warn(`⚠️ Ошибка загрузки маркета: ${response.status}`);
+                // Генерируем демо-данные если сервер недоступен
+                return this.generateMarketListings(20);
             }
         } catch (error) {
-            console.warn('⚠️ Не удалось загрузить маркет:', error);
+            console.warn('⚠️ Не удалось загрузить маркет, использую демо-данные:', error.message);
+            // Генерируем демо-данные
+            return this.generateMarketListings(20);
         }
-        return [];
+    },
+    
+    // Генерация демо-лотков для маркета
+    generateMarketListings(count) {
+        console.log(`🎲 Генерация ${count} демо-лотков...`);
+        const listings = [];
+        const sellers = ['Игрок1', 'Игрок2', 'Игрок3', 'Игрок4', 'Игрок5'];
+        const rarities = ['common', 'rare', 'epic', 'legendary'];
+        const rarityWeights = [40, 30, 20, 10]; // Проценты
+        
+        for (let i = 0; i < count; i++) {
+            // Выбираем редкость с учетом весов
+            let rand = Math.random() * 100;
+            let rarityIndex = 0;
+            for (let j = 0; j < rarityWeights.length; j++) {
+                rand -= rarityWeights[j];
+                if (rand <= 0) {
+                    rarityIndex = j;
+                    break;
+                }
+            }
+            
+            const cardId = Math.floor(Math.random() * 10) + 1;
+            const rarity = rarities[rarityIndex];
+            const price = this.calculateCardPrice(rarity, cardId);
+            const seller = sellers[Math.floor(Math.random() * sellers.length)];
+            
+            listings.push({
+                id: 'demo_listing_' + Date.now() + '_' + i,
+                sellerId: 'demo_seller_' + Math.floor(Math.random() * 1000),
+                sellerName: seller,
+                cardId: cardId,
+                rarity: rarity,
+                price: price,
+                createdAt: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString(),
+                isDemo: true
+            });
+        }
+        
+        console.log(`✅ Сгенерировано ${listings.length} демо-лотков`);
+        return listings;
+    },
+    
+    // Расчет цены карты
+    calculateCardPrice(rarity, cardId) {
+        const basePrices = {
+            common: { min: 10, max: 50 },
+            rare: { min: 50, max: 200 },
+            epic: { min: 200, max: 800 },
+            legendary: { min: 800, max: 2000 }
+        };
+        
+        const priceRange = basePrices[rarity] || basePrices.common;
+        let price = priceRange.min + Math.random() * (priceRange.max - priceRange.min);
+        
+        // Множитель за номер карты (карты с бóльшим номером дороже)
+        price *= (1 + (cardId / 20));
+        
+        // Округляем до кратного 10
+        price = Math.round(price / 10) * 10;
+        
+        return Math.max(10, Math.min(10000, price));
     },
     
     // Создание лота на маркете
@@ -524,14 +536,15 @@ const API = {
                 const data = await response.json();
                 console.log('✅ Пак открыт:', data);
                 return data;
+            } else {
+                console.warn(`⚠️ Ошибка открытия пака: ${response.status}`);
+                // Используем локальную генерацию если сервер недоступен
+                return this.generateRandomCard();
             }
         } catch (error) {
-            console.warn('⚠️ Не удалось открыть пак через API:', error);
+            console.warn('⚠️ Не удалось открыть пак через API, использую локальную генерацию:', error);
+            return this.generateRandomCard();
         }
-        
-        // Локальная логика если бэкенд недоступен
-        console.log('🔄 Использую локальную генерацию карты');
-        return this.generateRandomCard();
     },
     
     // Генерация случайной карты (локально)
@@ -540,15 +553,19 @@ const API = {
         const rarities = ['common', 'common', 'common', 'rare', 'rare', 'epic', 'legendary'];
         const rarity = rarities[Math.floor(Math.random() * rarities.length)];
         
+        const card = {
+            id: 'card_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+            cardId: cardId,
+            rarity: rarity,
+            name: `Карта #${cardId}`,
+            ownerId: userId,
+            obtainedAt: new Date().toISOString()
+        };
+        
+        console.log(`🎲 Сгенерирована карта: ${rarity} #${cardId}`);
         return {
             success: true,
-            card: {
-                id: 'card_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-                cardId: cardId,
-                rarity: rarity,
-                name: `Карта #${cardId}`,
-                ownerId: userId
-            }
+            card: card
         };
     }
 };
@@ -599,7 +616,6 @@ const Utils = {
         }
         
         const imageUrl = this.getCardImageUrl(cardId);
-        console.log(`🖼️ Загружаю картинку: ${imageUrl} для карты ${cardId}`);
         img.src = imageUrl;
         
         // Fallback если картинка не загрузилась
@@ -662,12 +678,18 @@ const Utils = {
             notification.style.animation = isMobile ? 'slideOutMobile 0.3s ease' : 'slideOut 0.3s ease';
             setTimeout(() => notification.remove(), 300);
         }, 3000);
-        
-        // Добавляем стили для анимации если их нет
-        if (!document.querySelector('#notification-styles')) {
+    }
+};
+
+// ========== ОБНОВЛЕНИЕ ИНТЕРФЕЙСА ==========
+const UI = {
+    // Адаптивный CSS
+    applyResponsiveStyles() {
+        if (!document.querySelector('#responsive-styles')) {
             const style = document.createElement('style');
-            style.id = 'notification-styles';
+            style.id = 'responsive-styles';
             style.textContent = `
+                /* Анимации уведомлений */
                 @keyframes slideIn {
                     from { transform: translateX(100%); opacity: 0; }
                     to { transform: translateX(0); opacity: 1; }
@@ -684,29 +706,7 @@ const Utils = {
                     from { transform: translate(-50%, 0); opacity: 1; }
                     to { transform: translate(-50%, -20px); opacity: 0; }
                 }
-                @keyframes loadingDots {
-                    0%, 20% { content: '.'; }
-                    40% { content: '..'; }
-                    60%, 100% { content: '...'; }
-                }
-                .loading-dots::after {
-                    content: '...';
-                    animation: loadingDots 1.5s infinite;
-                }
-            `;
-            document.head.appendChild(style);
-        }
-    }
-};
-
-// ========== ОБНОВЛЕНИЕ ИНТЕРФЕЙСА ==========
-const UI = {
-    // Адаптивный CSS
-    applyResponsiveStyles() {
-        if (!document.querySelector('#responsive-styles')) {
-            const style = document.createElement('style');
-            style.id = 'responsive-styles';
-            style.textContent = `
+                
                 /* Адаптивные стили */
                 @media (max-width: 768px) {
                     .container {
@@ -791,32 +791,30 @@ const UI = {
     
     // Обновление профиля
     updateProfile() {
-        document.getElementById('username').textContent = `@${username}`;
-        document.getElementById('balance').textContent = `${Utils.formatNumber(userData.balance)} хериков`;
-        
+        const usernameElement = document.getElementById('username');
+        const balanceElement = document.getElementById('balance');
         const farmCounter = document.getElementById('farmCounter');
+        
+        if (usernameElement) {
+            usernameElement.textContent = `@${username}`;
+        }
+        
+        if (balanceElement) {
+            balanceElement.textContent = `${Utils.formatNumber(userData.balance)} хериков`;
+        }
+        
         if (farmCounter) {
             farmCounter.innerHTML = `
                 <div>Всего кликов: <b>${userData.farmStats.totalClicks || 0}</b></div>
                 <div>Хериков за клик: <b>1</b></div>
             `;
         }
-        
-        // Показываем метку устройства если не мобильное
-        if (!isMobile) {
-            const deviceInfo = document.getElementById('deviceInfo');
-            if (deviceInfo) {
-                deviceInfo.textContent = `Устройство: ${Storage.getDeviceId().substring(0, 8)}...`;
-                deviceInfo.style.fontSize = '11px';
-                deviceInfo.style.color = '#64748b';
-                deviceInfo.style.marginTop = '5px';
-            }
-        }
     },
     
     // Отображение карт пользователя
     displayUserCards() {
         const container = document.getElementById('myCards');
+        if (!container) return;
         
         if (!userData.cards || userData.cards.length === 0) {
             container.innerHTML = `
@@ -832,7 +830,7 @@ const UI = {
                     <div style="font-size: ${isMobile ? '40px' : '48px'}; margin-bottom: 15px;">🃏</div>
                     <h3 style="color: #cbd5e1; margin-bottom: 10px; font-size: ${isMobile ? '16px' : '18px'};">У вас пока нет карт</h3>
                     <p style="margin-bottom: 20px; font-size: ${isMobile ? '13px' : '14px'};">Откройте свой первый пак, чтобы получить карты!</p>
-                    <button onclick="document.getElementById('openPack').click()" 
+                    <button onclick="document.getElementById('openPack')?.click()" 
                             style="
                                 background: #8b5cf6;
                                 color: white;
@@ -849,7 +847,6 @@ const UI = {
             return;
         }
         
-        const cardWidth = isMobile ? '130px' : '160px';
         const gridColumns = isMobile ? 'repeat(auto-fill, minmax(130px, 1fr))' : 'repeat(auto-fill, minmax(160px, 1fr))';
         
         container.innerHTML = `
@@ -910,9 +907,10 @@ const UI = {
         `;
     },
     
-       // Отображение маркета
+        // Отображение маркета
     displayMarket() {
         const container = document.getElementById('market');
+        if (!container) return;
         
         // Фильтруем свои лоты
         const otherListings = marketListings.filter(listing => listing.sellerId !== userId);
@@ -940,7 +938,6 @@ const UI = {
         }
         
         const gridColumns = isMobile ? 'repeat(auto-fill, minmax(140px, 1fr))' : 'repeat(auto-fill, minmax(180px, 1fr))';
-        const cardHeight = isMobile ? '120px' : '140px';
         
         container.innerHTML = `
             <div class="cards-grid" style="
@@ -951,7 +948,7 @@ const UI = {
             ">
                 ${otherListings.map(listing => {
                     const canBuy = userData.balance >= listing.price;
-                    const cardImage = Utils.createCardImage(listing.cardId, 'card-image', '100%', cardHeight);
+                    const cardImage = Utils.createCardImage(listing.cardId, 'card-image', '100%', isMobile ? '120px' : '140px');
                     
                     return `
                     <div class="card-item ${listing.rarity}" 
@@ -1021,4 +1018,5 @@ const UI = {
                 }).join('')}
             </div>
         `;
-     }
+    }
+};
