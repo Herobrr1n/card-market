@@ -1,5 +1,6 @@
 // ========== КОНФИГУРАЦИЯ ==========
 const CONFIG = {
+    BACKEND_URL: 'http://localhost:3000', // Подключаемся к вашему серверу
     PACK_COST: 50,
     MIN_SELL_PRICE: 10,
     MAX_SELL_PRICE: 10000,
@@ -10,6 +11,7 @@ const CONFIG = {
 console.log('=== ЗАПУСК APP.JS ===');
 
 let tg, userId, username, isMobile = false;
+let isOnline = true;
 
 // Определяем пользователя из Telegram
 try {
@@ -186,6 +188,149 @@ if (!document.querySelector('#app-styles')) {
     document.head.appendChild(style);
 }
 
+// ========== API КЛИЕНТ ==========
+const API = {
+    async checkOnlineStatus() {
+        try {
+            const response = await fetch(`${CONFIG.BACKEND_URL}/api/debug/ping`, {
+                method: 'GET',
+                headers: { 'Accept': 'application/json' }
+            });
+            return response.ok;
+        } catch (error) {
+            console.warn('⚠️ Сервер недоступен:', error.message);
+            return false;
+        }
+    },
+    
+    async loadUserDataFromServer() {
+        try {
+            console.log(`📡 Загрузка данных пользователя ${userId} с сервера...`);
+            const response = await fetch(`${CONFIG.BACKEND_URL}/api/user/${userId}`, {
+                method: 'GET',
+                headers: { 'Accept': 'application/json' }
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                console.log('✅ Данные пользователя получены с сервера');
+                return data;
+            }
+            throw new Error(`Ошибка сервера: ${response.status}`);
+        } catch (error) {
+            console.warn('⚠️ Ошибка загрузки с сервера:', error.message);
+            return null;
+        }
+    },
+    
+    async saveUserDataToServer(data) {
+        try {
+            console.log('📡 Сохранение данных на сервер...');
+            const response = await fetch(`${CONFIG.BACKEND_URL}/api/user/${userId}`, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify(data)
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                console.log('✅ Данные сохранены на сервер');
+                return result.success;
+            }
+            throw new Error(`Ошибка сервера: ${response.status}`);
+        } catch (error) {
+            console.warn('⚠️ Ошибка сохранения на сервер:', error.message);
+            return false;
+        }
+    },
+    
+    async loadMarketFromServer() {
+        try {
+            console.log('🛒 Загрузка маркета с сервера...');
+            const response = await fetch(`${CONFIG.BACKEND_URL}/api/market`, {
+                method: 'GET',
+                headers: { 'Accept': 'application/json' }
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                console.log(`✅ Получено ${data.length} лотов с сервера`);
+                return data;
+            }
+            throw new Error(`Ошибка сервера: ${response.status}`);
+        } catch (error) {
+            console.warn('⚠️ Ошибка загрузки маркета:', error.message);
+            return null;
+        }
+    },
+    
+    async createListingOnServer(card, price) {
+        try {
+            console.log('📤 Создание лота на сервере...');
+            const response = await fetch(`${CONFIG.BACKEND_URL}/api/market/list`, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({
+                    sellerId: userId,
+                    sellerName: username, // Используем реальный username из Telegram
+                    cardId: card.cardId,
+                    rarity: card.rarity,
+                    price: price,
+                    cardData: card // Отправляем полные данные карты
+                })
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                console.log('✅ Лот создан на сервере');
+                return result.listing;
+            }
+            
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `Ошибка сервера: ${response.status}`);
+        } catch (error) {
+            console.warn('⚠️ Ошибка создания лота:', error.message);
+            throw error;
+        }
+    },
+    
+    async buyListingOnServer(listingId) {
+        try {
+            console.log(`🛒 Покупка лота ${listingId} на сервере...`);
+            const response = await fetch(`${CONFIG.BACKEND_URL}/api/market/buy`, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({
+                    buyerId: userId,
+                    buyerName: username,
+                    listingId: listingId
+                })
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || `Ошибка сервера: ${response.status}`);
+            }
+            
+            const result = await response.json();
+            console.log('✅ Покупка обработана на сервере');
+            return result;
+        } catch (error) {
+            console.warn('⚠️ Ошибка покупки:', error.message);
+            throw error;
+        }
+    }
+};
+
 // ========== ХРАНЕНИЕ ДАННЫХ ==========
 const Storage = {
     getStorageKey() {
@@ -208,6 +353,15 @@ const Storage = {
             localStorage.setItem(this.getStorageKey(), JSON.stringify(dataToSave));
             console.log('💾 Данные пользователя сохранены локально');
             
+            // Пробуем сохранить на сервер
+            if (isOnline) {
+                try {
+                    await API.saveUserDataToServer(dataToSave);
+                } catch (serverError) {
+                    console.warn('⚠️ Не удалось сохранить на сервер:', serverError.message);
+                }
+            }
+            
             return true;
         } catch (error) {
             console.error('❌ Ошибка сохранения:', error);
@@ -217,14 +371,15 @@ const Storage = {
     
     async saveMarket() {
         try {
-            // Сохраняем маркет локально
+            // Сохраняем маркет локально (только демо-лоты)
+            const demoListings = marketListings.filter(listing => listing.isDemo);
             const marketData = {
-                listings: marketListings,
+                listings: demoListings,
                 lastUpdate: new Date().toISOString()
             };
             
             localStorage.setItem(this.getMarketKey(), JSON.stringify(marketData));
-            console.log('💾 Данные маркета сохранены локально');
+            console.log('💾 Данные маркета сохранены локально (только демо)');
             
             return true;
         } catch (error) {
@@ -237,17 +392,30 @@ const Storage = {
         try {
             console.log('📥 Загрузка данных пользователя...');
             
-            // Загружаем локальные данные
+            // 1. Пробуем загрузить с сервера
+            let serverData = null;
+            if (isOnline) {
+                serverData = await API.loadUserDataFromServer();
+            }
+            
+            // 2. Загружаем локальные данные
             const localData = this.loadLocalData();
             
-            if (localData) {
-                console.log('✅ Данные пользователя загружены локально');
-                return localData;
+            // 3. Синхронизируем
+            let finalData;
+            if (serverData && localData) {
+                // Синхронизация: берем лучшие значения
+                finalData = this.syncData(serverData, localData);
+            } else if (serverData) {
+                finalData = serverData;
+            } else if (localData) {
+                finalData = localData;
             } else {
                 // Создаем новые данные
-                console.log('🆕 Созданы новые данные пользователя');
-                return this.getInitialData();
+                finalData = this.getInitialData();
             }
+            
+            return finalData;
             
         } catch (error) {
             console.error('❌ Ошибка загрузки данных:', error);
@@ -255,29 +423,84 @@ const Storage = {
         }
     },
     
+    syncData(serverData, localData) {
+        console.log('🔄 Синхронизация данных...');
+        
+        return {
+            // Берем максимальный баланс
+            balance: Math.max(
+                serverData.balance || 0,
+                localData.balance || 0,
+                CONFIG.INITIAL_BALANCE
+            ),
+            
+            // Объединяем карты
+            cards: this.mergeCards(serverData.cards || [], localData.cards || []),
+            
+            // Берем максимальное количество кликов
+            farmStats: {
+                totalClicks: Math.max(
+                    serverData.farmStats?.totalClicks || 0,
+                    localData.farmStats?.totalClicks || 0,
+                    0
+                )
+            },
+            
+            // Метаданные
+            username: username,
+            lastSync: new Date().toISOString()
+        };
+    },
+    
+    mergeCards(serverCards, localCards) {
+        const cardMap = new Map();
+        
+        // Добавляем все карты в Map (по ID)
+        [...serverCards, ...localCards].forEach(card => {
+            if (card.id) {
+                cardMap.set(card.id, card);
+            }
+        });
+        
+        return Array.from(cardMap.values());
+    },
+    
     async loadMarket() {
         try {
             console.log('📥 Загрузка маркета...');
             
-            // Загружаем локальные данные маркета
-            const marketData = this.loadLocalMarket();
+            let serverMarket = [];
+            let localMarket = [];
             
-            if (marketData && marketData.listings && marketData.listings.length > 0) {
-                console.log(`✅ Маркет загружен локально: ${marketData.listings.length} лотов`);
-                return marketData.listings;
-            } else {
-                // Создаем демо-маркет
-                console.log('🎲 Создаю демо-маркет');
-                const demoListings = this.generateDemoListings(15);
-                this.saveMarketData(demoListings);
-                return demoListings;
+            // 1. Пробуем загрузить с сервера
+            if (isOnline) {
+                serverMarket = await API.loadMarketFromServer() || [];
             }
+            
+            // 2. Загружаем локальный маркет (только демо)
+            const localData = this.loadLocalMarket();
+            if (localData && localData.listings) {
+                localMarket = localData.listings;
+            }
+            
+            // 3. Объединяем: реальные лоты с сервера + демо лоты
+            const realListings = serverMarket.filter(listing => !listing.isDemo);
+            const demoListings = localMarket.filter(listing => listing.isDemo);
+            
+            // Убираем дубликаты демо-лотов
+            const uniqueDemoListings = demoListings.filter(demoListing => 
+                !realListings.some(realListing => realListing.id === demoListing.id)
+            );
+            
+            const combinedMarket = [...realListings, ...uniqueDemoListings];
+            console.log(`✅ Маркет загружен: ${realListings.length} реальных + ${uniqueDemoListings.length} демо = ${combinedMarket.length} лотов`);
+            
+            return combinedMarket;
             
         } catch (error) {
             console.error('❌ Ошибка загрузки маркета:', error);
-            const demoListings = this.generateDemoListings(15);
-            this.saveMarketData(demoListings);
-            return demoListings;
+            // Возвращаем демо-лоты
+            return this.generateDemoListings(15);
         }
     },
     
@@ -298,20 +521,6 @@ const Storage = {
         } catch (error) {
             console.error('❌ Ошибка загрузки локального маркета:', error);
             return null;
-        }
-    },
-    
-    saveMarketData(listings) {
-        try {
-            const marketData = {
-                listings: listings,
-                lastUpdate: new Date().toISOString()
-            };
-            localStorage.setItem(this.getMarketKey(), JSON.stringify(marketData));
-            return true;
-        } catch (error) {
-            console.error('❌ Ошибка сохранения маркета:', error);
-            return false;
         }
     },
     
@@ -343,7 +552,7 @@ const Storage = {
                 rarity: rarity,
                 price: price,
                 isDemo: true,
-                created: new Date().toISOString()
+                createdAt: new Date().toISOString()
             });
         }
         
@@ -829,15 +1038,46 @@ async function sellCard(cardId) {
         return;
     }
     
-    if (!confirm(`🎴 Выставить карту #${card.cardId} на продажу за ${Utils.formatNumber(price)} хериков?\n\nПродавец: @${username}`)) {
+    if (!confirm(`🎴 Выставить карту #${card.cardId} на продажу за ${Utils.formatNumber(price)} хериков?\n\nПродавец: @${username}\n\nКарта появится на общем маркете для всех игроков!`)) {
         return;
     }
     
-    Utils.showNotification('🔄 Создаем лот на маркете...', 'info');
+    Utils.showNotification('🔄 Создаем лот на онлайн-маркете...', 'info');
     
     try {
-        // Создаем лот
-        const listing = {
+        // Пробуем создать лот на сервере
+        const listing = await API.createListingOnServer(card, price);
+        
+        if (listing) {
+            // Удаляем карту у пользователя
+            userData.cards = userData.cards.filter(c => c.id !== cardId);
+            
+            // Добавляем лот в маркет (помечаем как реальный)
+            listing.isDemo = false;
+            marketListings.push(listing);
+            
+            // Обновляем интерфейс
+            UI.displayUserCards();
+            UI.displayMarket();
+            
+            // Сохраняем данные
+            await Storage.saveData();
+            
+            Utils.showNotification(
+                `✅ Карта выставлена на онлайн-маркет за ${Utils.formatNumber(price)} хериков!\nТеперь другие игроки могут её купить!`, 
+                'success'
+            );
+        } else {
+            throw new Error('Не удалось создать лот на сервере');
+        }
+        
+    } catch (error) {
+        console.error('❌ Ошибка при создании лота на сервере:', error);
+        
+        // Пробуем локальный вариант
+        Utils.showNotification('⚠️ Сервер недоступен, сохраняем локально...', 'warning');
+        
+        const localListing = {
             id: Utils.generateListingId(),
             sellerId: userId,
             sellerName: username,
@@ -846,32 +1086,28 @@ async function sellCard(cardId) {
             price: price,
             isDemo: false,
             originalCardId: card.id,
-            created: new Date().toISOString(),
+            createdAt: new Date().toISOString(),
             cardData: card
         };
         
         // Удаляем карту у пользователя
         userData.cards = userData.cards.filter(c => c.id !== cardId);
         
-        // Добавляем лот в маркет
-        marketListings.push(listing);
+        // Добавляем в локальный маркет
+        marketListings.push(localListing);
         
         // Обновляем интерфейс
         UI.displayUserCards();
         UI.displayMarket();
         
-        // Сохраняем данные
+        // Сохраняем локально
         await Storage.saveData();
         await Storage.saveMarket();
         
         Utils.showNotification(
-            `✅ Карта выставлена на маркет за ${Utils.formatNumber(price)} хериков!`, 
+            `✅ Карта выставлена локально за ${Utils.formatNumber(price)} хериков!\n(Онлайн-маркет недоступен)`, 
             'success'
         );
-        
-    } catch (error) {
-        console.error('❌ Ошибка при создании лота:', error);
-        Utils.showNotification('❌ Ошибка при выставлении на продажу. Попробуйте позже.', 'error');
     }
 }
 
@@ -903,54 +1139,116 @@ async function buyMarketCard(listingId) {
         
         if (!confirm(`🛒 Покупка карты #${listing.cardId}\n\n` +
                      `Продавец: @${listing.sellerName}\n` +
-                     `Цена: ${Utils.formatNumber(listing.price)} хериков\n\n` +
+                     `Цена: ${Utils.formatNumber(listing.price)} хериков\n` +
+                     `${isDemoListing ? '(демо-лот)' : '(реальный лот с онлайн-маркета)'}\n\n` +
                      `Подтверждаете покупку?`)) {
             return;
         }
         
         Utils.showNotification('🔄 Обрабатываем покупку...', 'info');
         
-        // Обрабатываем покупку
         try {
-            // Обновляем баланс
-            userData.balance -= listing.price;
+            let result;
             
-            // Создаем карту
-            const purchasedCard = {
-                id: Utils.generateCardId(),
-                cardId: listing.cardId,
-                rarity: listing.rarity,
-                name: `Карта #${listing.cardId}`,
-                ownerId: userId,
-                purchasedAt: new Date().toISOString(),
-                purchasedFrom: listing.sellerId,
-                purchasePrice: listing.price,
-                isDemo: isDemoListing
-            };
+            if (isDemoListing) {
+                // Для демо-лотов обрабатываем локально
+                result = {
+                    success: true,
+                    newBalance: userData.balance - listing.price,
+                    card: {
+                        id: Utils.generateCardId(),
+                        cardId: listing.cardId,
+                        rarity: listing.rarity,
+                        name: `Карта #${listing.cardId} (демо)`,
+                        purchasedAt: new Date().toISOString(),
+                        purchasedFrom: listing.sellerId,
+                        purchasePrice: listing.price,
+                        isDemo: true
+                    }
+                };
+            } else {
+                // Для реальных лотов покупаем через сервер
+                result = await API.buyListingOnServer(listingId);
+            }
             
-            // Добавляем карту в инвентарь
-            userData.cards.push(purchasedCard);
+            if (result && result.success) {
+                // Обновляем баланс
+                userData.balance = result.newBalance || (userData.balance - listing.price);
+                
+                // Добавляем карту
+                const purchasedCard = result.card || {
+                    id: Utils.generateCardId(),
+                    cardId: listing.cardId,
+                    rarity: listing.rarity,
+                    name: `Карта #${listing.cardId}`,
+                    ownerId: userId,
+                    purchasedAt: new Date().toISOString(),
+                    purchasedFrom: listing.sellerId,
+                    purchasePrice: listing.price,
+                    isDemo: isDemoListing
+                };
+                
+                userData.cards.push(purchasedCard);
+                
+                // Удаляем лот из маркета
+                marketListings = marketListings.filter(l => l.id !== listingId);
+                
+                // Обновляем интерфейс
+                UI.updateProfile();
+                UI.displayUserCards();
+                UI.displayMarket();
+                
+                // Сохраняем данные
+                await Storage.saveData();
+                if (isDemoListing) {
+                    await Storage.saveMarket();
+                }
+                
+                Utils.showNotification(
+                    `🎉 Вы купили карту #${listing.cardId} за ${Utils.formatNumber(listing.price)} хериков!\n` +
+                    `Продавец: @${listing.sellerName}`, 
+                    'success'
+                );
+                
+            } else {
+                const errorMessage = result?.error || 'Не удалось купить карту';
+                Utils.showNotification(`❌ ${errorMessage}`, 'error');
+            }
             
-            // Удаляем лот из маркета
-            marketListings = marketListings.filter(l => l.id !== listingId);
+        } catch (apiError) {
+            console.error('❌ Ошибка покупки:', apiError);
             
-            // Обновляем интерфейс
-            UI.updateProfile();
-            UI.displayUserCards();
-            UI.displayMarket();
-            
-            // Сохраняем данные
-            await Storage.saveData();
-            await Storage.saveMarket();
-            
-            Utils.showNotification(
-                `🎉 Вы купили карту #${listing.cardId} за ${Utils.formatNumber(listing.price)} хериков!`, 
-                'success'
-            );
-            
-        } catch (error) {
-            console.error('❌ Ошибка при обработке покупки:', error);
-            Utils.showNotification('❌ Произошла ошибка при покупке. Попробуйте позже.', 'error');
+            // Если это демо-лот, все равно покупаем
+            if (isDemoListing) {
+                userData.balance -= listing.price;
+                
+                const demoCard = {
+                    id: Utils.generateCardId(),
+                    cardId: listing.cardId,
+                    rarity: listing.rarity,
+                    name: `Карта #${listing.cardId}`,
+                    purchasedAt: new Date().toISOString(),
+                    purchasedFrom: listing.sellerId,
+                    purchasePrice: listing.price,
+                    isDemo: true
+                };
+                
+                userData.cards.push(demoCard);
+                marketListings = marketListings.filter(l => l.id !== listingId);
+                
+                UI.updateProfile();
+                UI.displayUserCards();
+                UI.displayMarket();
+                await Storage.saveData();
+                await Storage.saveMarket();
+                
+                Utils.showNotification(
+                    `🎉 Вы купили демо-карту #${listing.cardId} за ${Utils.formatNumber(listing.price)} хериков!`, 
+                    'success'
+                );
+            } else {
+                Utils.showNotification(`❌ Ошибка покупки: ${apiError.message}`, 'error');
+            }
         }
         
     } catch (error) {
@@ -1053,11 +1351,15 @@ async function initApp() {
     console.log('=== НАЧАЛО ЗАГРУЗКИ ===');
     
     try {
+        // Проверяем онлайн статус
+        isOnline = await API.checkOnlineStatus();
+        console.log(`🌐 Онлайн статус: ${isOnline ? 'ПОДКЛЮЧЕН' : 'ОФЛАЙН'}`);
+        
         // 1. Загружаем данные пользователя
         userData = await Storage.loadData();
         console.log('✅ Данные пользователя загружены');
         
-        // 2. Загружаем маркет
+        // 2. Загружаем маркет (реальные лоты + демо)
         marketListings = await Storage.loadMarket();
         console.log(`✅ Маркет загружен: ${marketListings.length} лотов`);
         
@@ -1071,22 +1373,36 @@ async function initApp() {
         initOpenPackButton();
         initCloseRouletteButton();
         
-        // 5. Автосохранение каждые 30 секунд
+        // 5. Обновляем маркет каждые 30 секунд (для онлайн режима)
+        if (isOnline) {
+            setInterval(async () => {
+                try {
+                    const updatedMarket = await Storage.loadMarket();
+                    if (JSON.stringify(updatedMarket) !== JSON.stringify(marketListings)) {
+                        marketListings = updatedMarket;
+                        UI.displayMarket();
+                        console.log('🔄 Маркет обновлен');
+                    }
+                } catch (error) {
+                    console.warn('⚠️ Ошибка обновления маркета:', error);
+                }
+            }, 30000);
+        }
+        
+        // 6. Автосохранение каждые 30 секунд
         setInterval(async () => {
             try {
                 await Storage.saveData();
-                await Storage.saveMarket();
                 console.log('💾 Фоновое сохранение выполнено');
             } catch (error) {
                 console.warn('⚠️ Ошибка фонового сохранения:', error);
             }
         }, 30000);
         
-        // 6. Сохраняем при закрытии вкладки
+        // 7. Сохраняем при закрытии вкладки
         window.addEventListener('beforeunload', async () => {
             try {
                 await Storage.saveData();
-                await Storage.saveMarket();
             } catch (error) {
                 console.warn('Ошибка при сохранении перед закрытием:', error);
             }
@@ -1096,7 +1412,11 @@ async function initApp() {
         
         // Показываем приветствие
         setTimeout(() => {
-            Utils.showNotification(`👋 Добро пожаловать, @${username}!`, 'success');
+            if (isOnline) {
+                Utils.showNotification(`👋 Добро пожаловать, @${username}!\n✅ Онлайн-маркет доступен`, 'success');
+            } else {
+                Utils.showNotification(`👋 Добро пожаловать, @${username}!\n⚠️ Работаем в офлайн-режиме`, 'info');
+            }
         }, 1000);
         
     } catch (error) {
