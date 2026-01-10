@@ -33,7 +33,7 @@
     </button>
   </div>
   
-  <!-- Рулетка для открытия пака (скрыта по умолчанию) -->
+  <!-- Рулетка для открытия пака -->
   <div id="rouletteContainer" style="display:none; text-align:center; margin: 30px 0; padding: 20px; background: #1e293b; border-radius: 10px;">
     <h2 id="rouletteTitle">🎰 Рулетка</h2>
     <div id="roulette" style="
@@ -46,7 +46,7 @@
       background: #0f172a;
       margin: 20px 0;
     ">
-      <!-- Рулетка будет здесь -->
+      <!-- Рулетка здесь -->
     </div>
     <div id="rouletteResult" style="margin-top: 20px; padding: 15px; background: rgba(255, 255, 255, 0.1); border-radius: 10px;">
       <p id="resultText">Крутим рулетку...</p>
@@ -93,7 +93,7 @@
       width: 150px;
       height: 180px;
       object-fit: cover;
-      margin: 10px;
+      margin: 0 10px;
       border-radius: 10px;
       border: 3px solid transparent;
       transition: all 0.3s;
@@ -103,6 +103,29 @@
       border-color: #f59e0b;
       box-shadow: 0 0 20px #f59e0b;
       animation: bounce 0.5s infinite;
+    }
+    
+    /* Стили для карточек */
+    .card-item {
+      background: #1e293b;
+      border-radius: 10px;
+      padding: 12px;
+      text-align: center;
+      border: 2px solid;
+      transition: transform 0.3s;
+    }
+    
+    .card-item:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+    }
+    
+    .card-item img {
+      width: 100%;
+      height: 140px;
+      object-fit: cover;
+      border-radius: 8px;
+      margin-bottom: 10px;
     }
   </style>
 </body>

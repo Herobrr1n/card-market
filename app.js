@@ -1,174 +1,462 @@
-// ========== ИНИЦИАЛИЗАЦИЯ ==========
-console.log('App starting...');
+// ========== КОНФИГУРАЦИЯ ==========
+const CONFIG = {
+    BACKEND_URL: 'http://localhost:3000',
+    PACK_COST: 50,
+    MIN_SELL_PRICE: 10,
+    MAX_SELL_PRICE: 10000
+};
 
-// Telegram WebApp
-let tg;
+// ========== ИНИЦИАЛИЗАЦИЯ ==========
+console.log('=== ИНИЦИАЛИЗАЦИЯ ПРИЛОЖЕНИЯ ===');
+
+let tg, userId, username;
+
+// Инициализация Telegram WebApp
 try {
     tg = window.Telegram?.WebApp;
     if (tg) {
         tg.expand();
         tg.ready();
-        console.log('Telegram WebApp initialized');
+        console.log('✅ Telegram WebApp инициализирован');
+        
+        userId = tg.initDataUnsafe?.user?.id;
+        username = tg.initDataUnsafe?.user?.username || 'user_' + userId;
+        
+        if (!userId) {
+            console.warn('❌ ID пользователя не найден, использую временный');
+            userId = 'temp_' + Date.now();
+            username = 'guest_' + Math.floor(Math.random() * 1000);
+        }
     } else {
-        console.warn('Telegram WebApp not found - running in browser mode');
+        console.warn('⚠️ Telegram WebApp не найден, режим браузера');
+        userId = 'browser_' + Date.now();
+        username = 'browser_user';
     }
 } catch (error) {
-    console.warn('Telegram WebApp error:', error);
+    console.error('❌ Ошибка инициализации Telegram:', error);
+    userId = 'error_' + Date.now();
+    username = 'error_user';
 }
 
-// Данные пользователя
-const userId = tg?.initDataUnsafe?.user?.id || Date.now();
-const username = tg?.initDataUnsafe?.user?.username || 'Guest_' + Math.floor(Math.random() * 1000);
-console.log('User:', { userId, username });
+console.log('👤 Пользователь:', { userId, username });
 
-// Backend URL
-const BACKEND_URL = 'http://localhost:3000';
-console.log('Backend URL:', BACKEND_URL);
+// Глобальные переменные
+let userData = {
+    balance: 100,
+    cards: [],
+    farmStats: { totalClicks: 0 }
+};
 
-// Картинки для рулетки (убедитесь что файлы существуют)
-const CARD_IMAGES = [];
-for (let i = 1; i <= 10; i++) {
-    CARD_IMAGES.push(`card${i}.png`);
-}
-
-// ========== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ==========
+let marketListings = [];
 let isOpeningPack = false;
-let myCards = [];
-let totalClicks = 0;
-let heriksPerClick = 1;
-let lastClickTime = 0;
-const CLICK_COOLDOWN = 100;
 
-// ========== ПРОФИЛЬ ==========
-async function loadProfile() {
-    console.log('Loading profile...');
-    try {
-        document.getElementById('username').textContent = `@${username}`;
-        
-        // Для демо - устанавливаем начальный баланс
-        const initialBalance = 100;
-        updateBalanceDisplay(initialBalance);
-        
-        // Если хотите подключить бэкенд, раскомментируйте:
-        /*
-        const response = await fetch(`${BACKEND_URL}/profile?userId=${userId}&username=${encodeURIComponent(username)}`);
-        if (response.ok) {
-            const data = await response.json();
-            updateBalanceDisplay(data.balance || 100);
-            if (data.cards) myCards = data.cards;
+// ========== API ВЗАИМОДЕЙСТВИЕ С БЭКЕНДОМ ==========
+const API = {
+    // Загрузка данных пользователя
+    async loadUserData() {
+        try {
+            const response = await fetch(`${CONFIG.BACKEND_URL}/api/user/${userId}`);
+            if (response.ok) {
+                const data = await response.json();
+                console.log('✅ Данные пользователя загружены:', data);
+                return data;
+            }
+        } catch (error) {
+            console.warn('⚠️ Не удалось загрузить данные, использую локальные:', error);
         }
-        */
-        
-    } catch (error) {
-        console.error('Profile load error:', error);
-        updateBalanceDisplay(100);
-    }
-}
-
-// ========== ФУНКЦИИ ДЛЯ БАЛАНСА ==========
-function updateBalanceDisplay(balance) {
-    document.getElementById('balance').textContent = `${balance} хериков`;
-}
-
-function getCurrentBalance() {
-    const balanceText = document.getElementById('balance').textContent;
-    const match = balanceText.match(/(\d+)/);
-    return match ? parseInt(match[1]) : 0;
-}
-
-function updateBalance(amount) {
-    const currentBalance = getCurrentBalance();
-    const newBalance = Math.max(0, currentBalance + amount);
-    updateBalanceDisplay(newBalance);
-    return newBalance;
-}
-
-// ========== ФАРМ ХЕРИКОВ ==========
-function initializeFarmButton() {
-    console.log('Initializing farm button...');
-    const farmBtn = document.getElementById('farmHeriks');
+        return null;
+    },
     
-    if (!farmBtn) {
-        console.error('❌ Кнопка #farmHeriks не найдена!');
-        return;
-    }
+    // Сохранение данных пользователя
+    async saveUserData() {
+        try {
+            const response = await fetch(`${CONFIG.BACKEND_URL}/api/user/${userId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(userData)
+            });
+            if (response.ok) {
+                console.log('✅ Данные пользователя сохранены');
+                return true;
+            }
+        } catch (error) {
+            console.warn('⚠️ Не удалось сохранить данные:', error);
+        }
+        return false;
+    },
     
-    farmBtn.addEventListener('click', function(event) {
-        const now = Date.now();
+    // Загрузка маркета
+    async loadMarket() {
+        try {
+            const response = await fetch(`${CONFIG.BACKEND_URL}/api/market`);
+            if (response.ok) {
+                const data = await response.json();
+                console.log('✅ Маркет загружен:', data);
+                return data;
+            }
+        } catch (error) {
+            console.warn('⚠️ Не удалось загрузить маркет:', error);
+        }
+        return [];
+    },
+    
+    // Создание лота на маркете
+    async createListing(cardId, price) {
+        try {
+            const response = await fetch(`${CONFIG.BACKEND_URL}/api/market/list`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sellerId: userId,
+                    sellerName: username,
+                    cardId,
+                    price
+                })
+            });
+            if (response.ok) {
+                console.log('✅ Лот создан');
+                return await response.json();
+            }
+        } catch (error) {
+            console.warn('⚠️ Не удалось создать лот:', error);
+        }
+        return null;
+    },
+    
+    // Покупка карты с маркета
+    async buyListing(listingId) {
+        try {
+            const response = await fetch(`${CONFIG.BACKEND_URL}/api/market/buy`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    buyerId: userId,
+listingId
+                })
+            });
+            if (response.ok) {
+                const data = await response.json();
+                console.log('✅ Карта куплена:', data);
+                return data;
+            }
+        } catch (error) {
+            console.warn('⚠️ Не удалось купить карту:', error);
+        }
+        return null;
+    },
+    
+    // Открытие пака
+    async openPack() {
+        try {
+            const response = await fetch(`${CONFIG.BACKEND_URL}/api/open-pack`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId })
+            });
+            if (response.ok) {
+                const data = await response.json();
+                console.log('✅ Пак открыт:', data);
+                return data;
+            }
+        } catch (error) {
+            console.warn('⚠️ Не удалось открыть пак, использую локальную логику:', error);
+        }
         
-        // Проверяем кд
-        if (now - lastClickTime < CLICK_COOLDOWN) {
+        // Локальная логика если бэкенд недоступен
+        return this.generateRandomCard();
+    },
+    
+    // Генерация случайной карты (локально)
+    generateRandomCard() {
+        const cardId = Math.floor(Math.random() * 10) + 1;
+        const rarities = ['common', 'common', 'common', 'rare', 'rare', 'epic', 'legendary'];
+        const rarity = rarities[Math.floor(Math.random() * rarities.length)];
+        
+        return {
+            card: {
+                id: 'card_' + Date.now() + '_' + Math.random(),
+                cardId,
+                rarity,
+                name: `Карта #${cardId}`,
+                ownerId: userId
+            },
+            success: true
+        };
+    }
+};
+
+// ========== УТИЛИТЫ ==========
+const Utils = {
+    // Получение цвета редкости
+    getRarityColor(rarity) {
+        const colors = {
+            common: '#94a3b8',
+            rare: '#3b82f6',
+            epic: '#a855f7',
+            legendary: '#f59e0b'
+        };
+        return colors[rarity?.toLowerCase()] || colors.common;
+    },
+    
+    // Форматирование числа
+    formatNumber(num) {
+        return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+    },
+    
+    // Генерация URL картинки
+    getCardImageUrl(cardId) {
+        // Пробуем разные пути
+        const paths = [
+            `images/card${cardId}.png`,
+            `./images/card${cardId}.png`,
+            `/images/card${cardId}.png`,
+            `frontend/images/card${cardId}.png`
+        ];
+        
+        // Возвращаем первый валидный путь
+        return paths[0];
+    },
+    
+    // Создание элемента картинки с fallback
+    createCardImage(cardId, className = '', width = '100%', height = '140px') {
+        const img = document.createElement('img');
+        img.className = className;
+        img.alt = `Card ${cardId}`;
+        img.style.width = width;
+        img.style.height = height;
+        img.style.objectFit = 'cover';
+        img.style.borderRadius = '8px';
+        
+        const imageUrl = this.getCardImageUrl(cardId);
+        img.src = imageUrl;
+        
+        // Fallback если картинка не загрузилась
+        img.onerror = () => {
+            console.warn(`Картинка card${cardId}.png не найдена, использую placeholder`);
+            img.src = `https://via.placeholder.com/150x200/1e293b/ffffff?text=Card+${cardId}`;
+            img.onerror = null; // Предотвращаем бесконечный цикл
+        };
+        
+        return img;
+    }
+};
+
+// ========== ОБНОВЛЕНИЕ ИНТЕРФЕЙСА ==========
+const UI = {
+    // Обновление профиля
+    updateProfile() {
+        document.getElementById('username').textContent = `@${username}`;
+        document.getElementById('balance').textContent = `${Utils.formatNumber(userData.balance)} хериков`;
+        
+        const farmCounter = document.getElementById('farmCounter');
+        if (farmCounter) {
+            farmCounter.innerHTML = `
+                <div>Всего кликов: <b>${userData.farmStats.totalClicks || 0}</b></div>
+                <div>Хериков за клик: <b>1</b></div>
+            `;
+        }
+    },
+    
+    // Отображение карт пользователя
+    displayUserCards() {
+        const container = document.getElementById('myCards');
+        
+        if (!userData.cards || userData.cards.length === 0) {
+            container.innerHTML = `
+                <div style="
+                    text-align: center;
+                    padding: 40px;
+                    background: #1e293b;
+                    border-radius: 15px;
+                    color: #94a3b8;
+                    border: 2px dashed #475569;
+                ">
+                    <div style="font-size: 48px; margin-bottom: 15px;">🃏</div>
+                    <h3 style="color: #cbd5e1; margin-bottom: 10px;">У вас пока нет карт</h3>
+                    <p style="margin-bottom: 20px;">Откройте свой первый пак, чтобы получить карты!</p>
+                    <div style="
+                        display: flex;
+                        justify-content: center;
+                        gap: 10px;
+                        color: #64748b;
+                        font-size: 12px;
+                    ">
+                        <div>🎲 Случайная карта</div>
+                        <div>⚡ Разные редкости</div>
+                        <div>💰 Продавайте на маркете</div>
+                    </div>
+                </div>
+            `;
             return;
         }
         
-        lastClickTime = now;
-        
-        // Анимация кнопки
-        farmBtn.style.animation = 'bounce 0.3s';
-        setTimeout(() => {
-            farmBtn.style.animation = '';
-        }, 300);
-        
-        // Создаем эффект монетки
-        createCoinEffect(event);
-        
-        // Добавляем херики
-        const earned = heriksPerClick;
-        const newBalance = updateBalance(earned);
-        
-        // Обновляем статистику
-        totalClicks++;
-        updateFarmCounter();
-        
-        console.log(`💰 Получено ${earned} хериков. Всего: ${newBalance}`);
-    });
+        container.innerHTML = `
+            <div style="
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+                gap: 15px;
+            ">
+                ${userData.cards.map(card => `
+                    <div class="card-item ${card.rarity}" 
+                         style="border-color: ${Utils.getRarityColor(card.rarity)}">
+                        ${Utils.createCardImage(card.cardId, 'card-image').outerHTML}
+                        <div style="margin: 10px 0;">
+                            <div style="font-weight: bold; font-size: 14px; margin-bottom: 5px;">
+                                Карта #${card.cardId}
+                            </div>
+                            <div style="
+                                color: ${Utils.getRarityColor(card.rarity)};
+                                font-size: 12px;
+                                font-weight: bold;
+                                background: rgba(0,0,0,0.3);
+                                padding: 3px 8px;
+                                border-radius: 20px;
+                                display: inline-block;
+                            ">
+                                ${card.rarity?.toUpperCase() || 'COMMON'}
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 8px; margin-top: 10px;">
+                            <button onclick="sellCard('${card.id}')" 
+                                    style="
+                                        flex: 1;
+                                        background: #22c55e;
+                                        padding: 8px;
+                                        font-size: 12px;
+                                    ">
+                                💰 Продать
+                            </button>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    },
     
-    console.log('✅ Кнопка фарма инициализирована');
-}
-
-function createCoinEffect(event) {
-    const coin = document.createElement('div');
-    coin.className = 'coin-popup';
-    coin.textContent = `+${heriksPerClick} 💰`;
-    coin.style.left = (event.clientX - 20) + 'px';
-    coin.style.top = (event.clientY - 20) + 'px';
-    
-    document.body.appendChild(coin);
-    
-    setTimeout(() => {
-        coin.remove();
-    }, 1000);
-}
-
-function updateFarmCounter() {
-const farmCounter = document.getElementById('farmCounter');
-    if (farmCounter) {
-        farmCounter.innerHTML = `
-            <div>Всего кликов: <b>${totalClicks}</b></div>
-            <div>Хериков за клик: <b>${heriksPerClick}</b></div>
+    // Отображение маркета
+    displayMarket() {
+        const container = document.getElementById('market');
+        
+        if (!marketListings || marketListings.length === 0) {
+            container.innerHTML = `
+                <div style="
+                    text-align: center;
+                    padding: 40px;
+                    background: #1e293b;
+                    border-radius: 15px;
+                    color: #94a3b8;
+                    border: 2px dashed #475569;
+                ">
+                    <div style="font-size: 48px; margin-bottom: 15px;">🏪</div>
+                    <h3 style="color: #cbd5e1; margin-bottom: 10px;">Маркет пуст</h3>
+                    <p>Здесь будут появляться карты, которые выставляют на продажу другие игроки</p>
+            <p style="margin-top: 20px; font-size: 14px; color: #64748b;">
+                        Выставьте свою первую карту на продажу!
+                    </p>
+                </div>
+            `;
+            return;
+        }
+        
+        // Фильтруем свои лоты (не показываем свои карты на маркете для покупки)
+        const otherListings = marketListings.filter(listing => listing.sellerId !== userId);
+        
+        if (otherListings.length === 0) {
+            container.innerHTML = `
+                <div style="
+                    text-align: center;
+                    padding: 30px;
+                    background: #1e293b;
+                    border-radius: 10px;
+                    color: #94a3b8;
+                ">
+                    <div style="font-size: 36px; margin-bottom: 10px;">👥</div>
+                    <p>Другие игроки еще не выставили карты на продажу</p>
+                </div>
+            `;
+            return;
+        }
+        
+        container.innerHTML = `
+            <div style="
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+                gap: 15px;
+            ">
+                ${otherListings.map(listing => `
+                    <div class="card-item ${listing.rarity}" 
+                         style="border-color: ${Utils.getRarityColor(listing.rarity)}">
+                        ${Utils.createCardImage(listing.cardId, 'card-image').outerHTML}
+                        <div style="margin: 10px 0;">
+                            <div style="font-weight: bold; font-size: 14px; margin-bottom: 5px;">
+                                Карта #${listing.cardId}
+                            </div>
+                            <div style="
+                                color: ${Utils.getRarityColor(listing.rarity)};
+                                font-size: 12px;
+                                font-weight: bold;
+                                background: rgba(0,0,0,0.3);
+                                padding: 3px 8px;
+                                border-radius: 20px;
+                                display: inline-block;
+                                margin-bottom: 8px;
+                            ">
+                                ${listing.rarity?.toUpperCase() || 'COMMON'}
+                            </div>
+                            <div style="font-size: 12px; color: #94a3b8; margin-bottom: 5px;">
+                                Продавец: ${listing.sellerName || 'Игрок'}
+                            </div>
+                        </div>
+                        <div style="
+                            background: rgba(34, 197, 94, 0.1);
+                            border-radius: 8px;
+                            padding: 10px;
+                            margin: 10px 0;
+                        ">
+                            <div style="font-size: 12px; color: #94a3b8;">Цена:</div>
+                            <div style="
+                                color: #22c55e;
+                                font-weight: bold;
+                                font-size: 20px;
+                            ">
+                                ${Utils.formatNumber(listing.price)} хериков
+                            </div>
+                        </div>
+                        <button onclick="buyMarketCard('${listing.id}')" 
+                                style="
+                                    width: 100%;
+                                    background: #6366f1;
+                                    padding: 10px;
+                                "
+                                ${userData.balance < listing.price ? 'disabled' : ''}>
+                            🛒 Купить
+                        </button>
+                    </div>
+                `).join('')}
+            </div>
         `;
     }
-}
+};
 
-// ========== РУЛЕТКА ДЛЯ ОТКРЫТИЯ ПАКА ==========
-function showRoulette() {
-    return new Promise((resolve) => {
-        const rouletteContainer = document.getElementById('rouletteContainer');
+// ========== РУЛЕТКА ==========
+const Roulette = {
+    async show() {
+        const container = document.getElementById('rouletteContainer');
         const rouletteDiv = document.getElementById('roulette');
-        const resultText = document.getElementById('resultText');
-        const rouletteTitle = document.getElementById('rouletteTitle');
+     const resultText = document.getElementById('resultText');
+        const title = document.getElementById('rouletteTitle');
         const closeBtn = document.getElementById('closeRoulette');
         
         // Показываем рулетку
-        rouletteContainer.style.display = 'block';
-        rouletteTitle.textContent = '🎰 Открываем пак...';
+        container.style.display = 'block';
+        title.textContent = '🎰 Открываем пак...';
         resultText.textContent = 'Подготовка рулетки...';
         closeBtn.style.display = 'none';
         
-        // Очищаем рулетку
+        // Очищаем
         rouletteDiv.innerHTML = '';
         
-        // Создаем контейнер для карточек рулетки
+        // Создаем трек для карточек
         const track = document.createElement('div');
         track.style.cssText = `
             display: flex;
@@ -179,365 +467,279 @@ function showRoulette() {
             transition: transform 3s cubic-bezier(0.1, 0.7, 0.1, 1);
         `;
         
-        // Добавляем карточки в рулетку
+        // Добавляем карточки
         for (let i = 0; i < 20; i++) {
-            const cardIndex = i % CARD_IMAGES.length;
-            const img = document.createElement('img');
-            img.className = 'roulette-card';
-            img.src = `images/card${(cardIndex + 1)}.png`;
-            img.alt = `Card ${cardIndex + 1}`;
-            img.onerror = function() {
-                this.src = `https://via.placeholder.com/150x180/1e293b/ffffff?text=Card+${cardIndex + 1}`;
-            };
+            const cardId = (i % 10) + 1;
+            const img = Utils.createCardImage(cardId, 'roulette-card', '150px', '180px');
+            img.style.margin = '0 10px';
             track.appendChild(img);
         }
         
         rouletteDiv.appendChild(track);
         
-        // Выбираем случайную карту как победителя
-        const winnerIndex = Math.floor(Math.random() * 15) + 3;
-        const winnerCardId = (winnerIndex % CARD_IMAGES.length) + 1;
-        const winnerRarity = getRandomRarity();
-        
-        console.log(`Winner: card${winnerCardId} (${winnerRarity})`);
-        
-        // Этап 1: Подготовка
-        setTimeout(() => {
-            resultText.textContent = 'Рулетка запущена...';
+        return new Promise((resolve) => {
+            // Выбираем победителя
+            const winnerIndex = Math.floor(Math.random() * 15) + 3;
+            const winnerCardId = (winnerIndex % 10) + 1;
+            const rarities = ['common', 'common', 'common', 'rare', 'rare', 'epic', 'legendary'];
+            const winnerRarity = rarities[Math.floor(Math.random() * rarities.length)];
             
-            // Этап 2: Запуск анимации
+            // Анимация
             setTimeout(() => {
-                // Вычисляем позицию для остановки на победителе
-                const cardWidth = 150 + 20; // ширина + margin
-                const targetPosition = -(winnerIndex * cardWidth) + (rouletteDiv.offsetWidth / 2) - (cardWidth / 2);
-                track.style.transform = `translateX(${targetPosition}px)`;
+                resultText.textContent = 'Рулетка запущена!';
                 
-                // Этап 3: Подсветка победителя
                 setTimeout(() => {
-                    const cards = track.querySelectorAll('.roulette-card');
-                    if (cards[winnerIndex]) {
-                        cards[winnerIndex].classList.add('highlight');
-                    }
+                    const cardWidth = 150 + 20;
+                    const targetPosition = -(winnerIndex * cardWidth) + (rouletteDiv.offsetWidth / 2) - (cardWidth / 2);
+                    track.style.transform = `translateX(${targetPosition}px)`;
                     
-                    // Создаем объект карты-победителя
-                    const wonCard = {
-                        id: Date.now() + winnerIndex,
-                        cardId: winnerCardId,
-                        rarity: winnerRarity,
-                        name: `Карта #${winnerCardId}`,
-                        image: `card${winnerCardId}.png`
-                    };
-                    
-                    resultText.innerHTML = `
-                        🎉 <strong>ВЫ ВЫИГРАЛИ!</strong><br>
-                        <span style="color:${getRarityColor(winnerRarity)}">
-                        ${winnerRarity.toUpperCase()} карту #${winnerCardId}</span>
-                    `;
-                    rouletteTitle.textContent = '🎊 Поздравляем!';
-                    
-                    // Добавляем карту в коллекцию
-                    myCards.push(wonCard);
-displayMyCards();
-                    
-                    // Показываем кнопку закрытия
-                    closeBtn.style.display = 'inline-block';
-                    
-                    resolve(wonCard);
-                    
-                }, 2000); // Ждем окончания анимации
+                    setTimeout(() => {
+                        const cards = track.querySelectorAll('.roulette-card');
+                        if (cards[winnerIndex]) {
+                            cards[winnerIndex].classList.add('highlight');
+                        }
+                        
+                        // Создаем карту-победителя
+                        const wonCard = {
+                            id: 'card_' + Date.now() + '_' + Math.random(),
+                            cardId: winnerCardId,
+                            rarity: winnerRarity,
+                            name: `Карта #${winnerCardId}`,
+                            ownerId: userId
+                        };
+                        
+                        resultText.innerHTML = `
+                            🎉 <strong>ВЫ ВЫИГРАЛИ!</strong><br>
+                            <span style="color:${Utils.getRarityColor(winnerRarity)}">
+                            ${winnerRarity.toUpperCase()} карту #${winnerCardId}</span>
+                        `;
+                        title.textContent = '🎊 Поздравляем!';
+                        
+                        closeBtn.style.display = 'inline-block';
+                        resolve(wonCard);
+                        
+                    }, 2000);
+                }, 1000);
+            }, 1000);
+        });
+    }
+};
+
+// ========== ОСНОВНАЯ ЛОГИКА ==========
+const App = {
+    // Инициализация
+    async init() {
+        console.log('=== ЗАГРУЗКА ДАННЫХ ===');
+        
+        // Загружаем данные пользователя
+        const savedData = await API.loadUserData();
+        if (savedData) {
+            userData = { ...userData, ...savedData };
+        }
+        
+        // Загружаем маркет
+        marketListings = await API.loadMarket();
+        
+        // Обновляем интерфейс
+        UI.updateProfile();
+        UI.displayUserCards();
+        UI.displayMarket();
+        
+        // Инициализируем кнопки
+        this.initButtons();
+        
+        // Сохраняем данные каждые 30 секунд
+     setInterval(() => {
+            API.saveUserData();
+        }, 30000);
+        
+        console.log('=== ПРИЛОЖЕНИЕ ЗАПУЩЕНО ===');
+    },
+    
+    // Инициализация кнопок
+    initButtons() {
+        // Кнопка фарма
+        const farmBtn = document.getElementById('farmHeriks');
+        if (farmBtn) {
+            farmBtn.addEventListener('click', (e) => {
+                // Анимация
+                farmBtn.style.animation = 'bounce 0.3s';
+                setTimeout(() => farmBtn.style.animation = '', 300);
                 
-            }, 1000); // Задержка перед запуском
-            
-        }, 1000); // Начальная задержка
-    });
-}
-
-// ========== ОТКРЫТИЕ ПАКА С РУЛЕТКОЙ ==========
-function initializeOpenPackButton() {
-    console.log('Initializing open pack button...');
-    const openPackBtn = document.getElementById('openPack');
-    const closeRouletteBtn = document.getElementById('closeRoulette');
-    
-    if (!openPackBtn) {
-        console.error('❌ Кнопка #openPack не найдена!');
-        return;
-    }
-    
-    // Кнопка открытия пака
-    openPackBtn.addEventListener('click', async function() {
-        console.log('🎯 Кнопка открытия пака нажата!');
-        
-        if (isOpeningPack) {
-            console.log('Уже открывается пак, игнорируем');
-            return;
+                // Эффект монетки
+                const coin = document.createElement('div');
+                coin.className = 'coin-popup';
+                coin.textContent = '+1 💰';
+                coin.style.left = (e.clientX - 20) + 'px';
+                coin.style.top = (e.clientY - 20) + 'px';
+                document.body.appendChild(coin);
+                setTimeout(() => coin.remove(), 1000);
+                
+                // Обновляем баланс
+                userData.balance += 1;
+                userData.farmStats.totalClicks = (userData.farmStats.totalClicks || 0) + 1;
+                
+                UI.updateProfile();
+            });
         }
         
-        isOpeningPack = true;
-        const originalText = openPackBtn.textContent;
-        
-        try {
-            // Блокируем кнопку
-            openPackBtn.disabled = true;
-            openPackBtn.textContent = '⌛️ Проверка...';
-            
-            // Проверяем баланс
-            const currentBalance = getCurrentBalance();
-            const packCost = 50;
-            
-            if (currentBalance < packCost) {
-                alert(`❌ Недостаточно хериков! Нужно ${packCost}, у вас ${currentBalance}`);
-                return;
-            }
-            
-            openPackBtn.textContent = '🎰 Открываем...';
-            
-            // Списываем стоимость пака
-            updateBalance(-packCost);
-            
-            // Показываем рулетку и ждем результат
-            const wonCard = await showRoulette();
-            
-            console.log('✅ Пак открыт успешно! Получена карта:', wonCard);
-            
-        } catch (error) {
-            console.error('❌ Ошибка при открытии пака:', error);
-            alert(`Ошибка: ${error.message}`);
-        } finally {
-            // Восстанавливаем кнопку
-            isOpeningPack = false;
-            openPackBtn.disabled = false;
-            openPackBtn.textContent = originalText;
-            console.log('🔄 Кнопка восстановлена');
+        // Кнопка открытия пака
+        const openPackBtn = document.getElementById('openPack');
+        if (openPackBtn) {
+            openPackBtn.addEventListener('click', async () => {
+                if (isOpeningPack) return;
+                
+                if (userData.balance < CONFIG.PACK_COST) {
+                    alert(`❌ Недостаточно хериков! Нужно ${CONFIG.PACK_COST}, у вас ${userData.balance}`);
+                    return;
+                }
+                
+                isOpeningPack = true;
+                openPackBtn.disabled = true;
+                const originalText = openPackBtn.textContent;
+                openPackBtn.textContent = '⌛ Обработка...';
+                
+                try {
+                    // Списываем стоимость
+                    userData.balance -= CONFIG.PACK_COST;
+                    UI.updateProfile();
+                    
+                    // Показываем рулетку
+                    const wonCard = await Roulette.show();
+                    
+                    // Добавляем карту
+                    userData.cards.push(wonCard);
+                    UI.displayUserCards();
+                    
+                    // Сохраняем данные
+                    await API.saveUserData();
+                    
+                } catch (error) {
+                    console.error('Ошибка открытия пака:', error);
+                    alert('Ошибка при открытии пака');
+                } finally {
+                    isOpeningPack = false;
+                    openPackBtn.disabled = false;
+                    openPackBtn.textContent = originalText;
+                }
+            });
         }
-    });
-    
-    // Кнопка закрытия рулетки
-    closeRouletteBtn.addEventListener('click', function() {
-        document.getElementById('rouletteContainer').style.display = 'none';
-    });
-}
-
-// ========== ПОКАЗ КАРТ ПОЛЬЗОВАТЕЛЯ ==========
-function displayMyCards() {
-    const myCardsDiv = document.getElementById('myCards');
-    
-    if (!myCards || myCards.length === 0) {
-        myCardsDiv.innerHTML = `
-            <div style="
-                text-align: center;
-                padding: 30px;
-                background: #1e293b;
-                border-radius: 10px;
-                color: #94a3b8;
-            ">
-                <div style="font-size: 48px; margin-bottom: 10px;">🃏</div>
-                <p>У вас пока нет карт</p>
-                <p style="font-size: 14px;">Откройте пак, чтобы получить первую карту!</p>
-            </div>
-        `;
-        return;
+        
+        // Кнопка закрытия рулетки
+        const closeRouletteBtn = document.getElementById('closeRoulette');
+        if (closeRouletteBtn) {
+            closeRouletteBtn.addEventListener('click', () => {
+                document.getElementById('rouletteContainer').style.display = 'none';
+            });
+        }
     }
-    
-    myCardsDiv.innerHTML = `
-        <div style="
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-            gap: 15px;
-        ">
-            ${myCards.map(card => `
-                <div class="user-card" style="
-                    background: #1e293b;
-                    border-radius: 10px;
-                    padding: 12px;
-                    text-align: center;
-                    border: 2px solid ${getRarityColor(card.rarity)};
-                    transition: transform 0.3s;
-                ">
-                    <img src="images/${card.image}" 
-                         alt="Card ${card.cardId}"
-                         style="
-                            width: 100%;
-                            height: 140px;
- object-fit: cover;
-                            border-radius: 8px;
-                            margin-bottom: 10px;
-                         "
-                         onerror="this.onerror=null; this.src='https://via.placeholder.com/150x140/1e293b/ffffff?text=Card+${card.cardId}'">
-                    <div style="font-weight: bold; margin-bottom: 5px; font-size: 14px;">
-                        Карта #${card.cardId}
-                    </div>
-                    <div style="color: ${getRarityColor(card.rarity)}; font-size: 12px; margin-bottom: 10px; font-weight: bold;">
-                        ${card.rarity ? card.rarity.toUpperCase() : 'COMMON'}
-                    </div>
-                    <button onclick="sellCard(${card.id})" 
-                            style="
-                                background: #22c55e;
-                                color: white;
-                                border: none;
-                                padding: 8px 12px;
-                                border-radius: 6px;
-                                font-size: 12px;
-                                cursor: pointer;
-                                width: 100%;
-                                transition: background 0.3s;
-                            "
-                            onmouseover="this.style.background='#16a34a'"
-                            onmouseout="this.style.background='#22c55e'">
-                        💰 Продать
-                    </button>
-                </div>
-            `).join('')}
-        </div>
-    `;
-}
+};
 
-// ========== МАРКЕТ ==========
-function loadMarket() {
-    console.log('Loading market...');
-    const marketDiv = document.getElementById('market');
-    
-    // Для демо - создаем тестовые лоты
-    const demoListings = [
-        { id: 1, cardId: 3, cardName: 'Огненный дракон', rarity: 'epic', price: 300 },
-        { id: 2, cardId: 7, cardName: 'Водяной дух', rarity: 'rare', price: 150 },
-        { id: 3, cardId: 1, cardName: 'Земляной голем', rarity: 'common', price: 50 },
-        { id: 4, cardId: 10, cardName: 'Легендарный феникс', rarity: 'legendary', price: 1000 }
-    ];
-    
-    marketDiv.innerHTML = `
-        <div style="
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-            gap: 15px;
-        ">
-            ${demoListings.map(listing => `
-                <div class="market-listing" style="
-                    background: #1e293b;
-                    border-radius: 10px;
-                    padding: 15px;
-                    text-align: center;
-                    border: 2px solid ${getRarityColor(listing.rarity)};
-                ">
-                    <div style="font-weight: bold; font-size: 16px; margin-bottom: 10px;">
-                        ${listing.cardName}
-                    </div>
-                    <img src="images/card${listing.cardId}.png" 
-                         alt="${listing.cardName}"
-                         style="
-                            width: 100%;
-                            height: 120px;
-                            object-fit: cover;
-                            border-radius: 8px;
-                            margin-bottom: 10px;
-                         "
-                         onerror="this.onerror=null; this.src='https://via.placeholder.com/200x120/1e293b/ffffff?text=${encodeURIComponent(listing.cardName)}'">
-                    <div style="color: ${getRarityColor(listing.rarity)}; font-size: 12px; margin-bottom: 10px; font-weight: bold;">
-                        ${listing.rarity.toUpperCase()}
-                    </div>
-                    <div style="color: #22c55e; font-weight: bold; font-size: 18px; margin: 10px 0;">
-                        ${listing.price} хериков
-                    </div>
-                    <button onclick="buyCard(${listing.id})" 
-                            style="
-                                background: #6366f1;
-                                color: white;
-                                border: none;
-padding: 8px 15px;
-                                border-radius: 6px;
-                                cursor: pointer;
-                                width: 100%;
-                                font-size: 14px;
-                                transition: background 0.3s;
-                            "
-                            onmouseover="this.style.background='#4f46e5'"
-                            onmouseout="this.style.background='#6366f1'">
-                        🛒 Купить
-                    </button>
-                </div>
-            `).join('')}
-        </div>
-    `;
-}
+// ========== ГЛОБАЛЬНЫЕ ФУНКЦИИ ==========
 
-// ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
-function getRarityColor(rarity) {
-    const colors = {
-        common: '#94a3b8',
-        rare: '#3b82f6',
-        epic: '#a855f7',
-        legendary: '#f59e0b',
-        mythic: '#ef4444'
-    };
-    return colors[rarity?.toLowerCase()] || colors.common;
-}
-
-function getRandomRarity() {
-    const rand = Math.random();
-    if (rand < 0.5) return 'common';      // 50%
-    if (rand < 0.8) return 'rare';        // 30%
-    if (rand < 0.95) return 'epic';       // 15%
-    return 'legendary';                   // 5%
-}
-
-function sellCard(cardId) {
-    const card = myCards.find(c => c.id === cardId);
+// Продажа карты
+async function sellCard(cardId) {
+    const card = userData.cards.find(c => c.id === cardId);
     if (!card) {
         alert('Карта не найдена!');
         return;
     }
     
-    const defaultPrice = card.rarity === 'legendary' ? 500 :
-                        card.rarity === 'epic' ? 300 :
-                        card.rarity === 'rare' ? 150 : 50;
+    // Запрашиваем цену
+    const priceInput = prompt(
+        `Введите цену продажи для ${card.rarity} карты #${card.cardId}:\n(от ${CONFIG.MIN_SELL_PRICE} до ${CONFIG.MAX_SELL_PRICE} хериков)`,
+        card.rarity === 'legendary' ? '1000' :
+        card.rarity === 'epic' ? '500' :
+        card.rarity === 'rare' ? '200' : '50'
+    );
     
-    const price = prompt(`Введите цену для карты #${card.cardId} (${card.rarity}):`, defaultPrice.toString());
-    if (price && !isNaN(price) && price > 0) {
-        if (confirm(`Выставить карту #${card.cardId} на продажу за ${price} хериков?`)) {
-            // Удаляем карту из коллекции
-            myCards = myCards.filter(c => c.id !== cardId);
-            displayMyCards();
-            
-            // Добавляем херики за продажу
-            updateBalance(parseInt(price));
-            
-            alert(`✅ Карта #${card.cardId} продана за ${price} хериков!`);
-        }
+    if (!priceInput) return;
+    
+    const price = parseInt(priceInput);
+    if (isNaN(price) || price < CONFIG.MIN_SELL_PRICE || price > CONFIG.MAX_SELL_PRICE) {
+        alert(`Цена должна быть от ${CONFIG.MIN_SELL_PRICE} до ${CONFIG.MAX_SELL_PRICE} хериков!`);
+        return;
     }
-}
-
-function buyCard(listingId) {
-    const price = 100; // Для демо фиксированная цена
-    const currentBalance = getCurrentBalance();
+ if (!confirm(`Выставить карту #${card.cardId} на продажу за ${Utils.formatNumber(price)} хериков?`)) {
+        return;
+    }
     
-    if (currentBalance >= price) {
-        if (confirm(`Купить карту за ${price} хериков?`)) {
-            updateBalance(-price);
-            alert('🎉 Покупка успешна! Карта добавлена в вашу коллекцию.');
-            // Здесь можно добавить логику добавления карты
-        }
+    // Создаем лот на маркете
+    const listing = await API.createListing(card.cardId, price);
+    if (listing) {
+        // Удаляем карту у пользователя
+        userData.cards = userData.cards.filter(c => c.id !== cardId);
+        
+        // Обновляем интерфейс
+        UI.displayUserCards();
+        UI.updateProfile();
+        
+        // Обновляем маркет
+        marketListings.push({
+            id: listing.id,
+            cardId: card.cardId,
+            rarity: card.rarity,
+            price: price,
+            sellerId: userId,
+            sellerName: username
+        });
+        
+        UI.displayMarket();
+        
+        alert(`✅ Карта выставлена на маркет за ${Utils.formatNumber(price)} хериков!`);
     } else {
-        alert('❌ Недостаточно хериков для покупки!');
+        alert('❌ Не удалось создать лот на маркете');
     }
 }
 
-// ========== ИНИЦИАЛИЗАЦИЯ ПРИЛОЖЕНИЯ ==========
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('=== DOM LOADED ===');
+// Покупка карты с маркета
+async function buyMarketCard(listingId) {
+    const listing = marketListings.find(l => l.id === listingId);
+    if (!listing) {
+        alert('Лот не найден!');
+        return;
+    }
     
-    // 1. Инициализируем кнопку фарма
-    initializeFarmButton();
+    if (userData.balance < listing.price) {
+        alert(`❌ Недостаточно хериков! Нужно ${listing.price}, у вас ${userData.balance}`);
+        return;
+    }
     
-    // 2. Инициализируем кнопку открытия пака
-    initializeOpenPackButton();
+    if (!confirm(`Купить карту #${listing.cardId} за ${Utils.formatNumber(listing.price)} хериков?`)) {
+        return;
+    }
     
-    // 3. Загружаем начальные данные
-    loadProfile();
-    loadMarket();
-    displayMyCards(); // Показываем пустые карты сначала
-    
-    console.log('=== APP INITIALIZED ===');
-});
+    // Совершаем покупку через API
+    const result = await API.buyListing(listingId);
+    if (result && result.success) {
+        // Обновляем баланс
+        userData.balance -= listing.price;
+        
+        // Добавляем карту
+        userData.cards.push({
+            id: 'card_' + Date.now() + '_' + Math.random(),
+            cardId: listing.cardId,
+            rarity: listing.rarity,
+            name: `Карта #${listing.cardId}`,
+            ownerId: userId
+        });
+        
+        // Удаляем лот с маркета
+        marketListings = marketListings.filter(l => l.id !== listingId);
+        
+        // Обновляем интерфейс
+        UI.updateProfile();
+        UI.displayUserCards();
+        UI.displayMarket();
+        
+        alert(`🎉 Вы купили карту #${listing.cardId} за ${Utils.formatNumber(listing.price)} хериков!`);
+    } else {
+        alert('❌ Не удалось купить карту. Возможно, её уже купили.');
+    }
+}
 
-// ========== ГЛОБАЛЬНЫЕ ФУНКЦИИ ==========
-window.sellCard = sellCard;
-window.buyCard = buyCard;                                   
+// ========== ЗАПУСК ПРИЛОЖЕНИЯ ==========
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('=== DOM ЗАГРУЖЕН ===');
+    App.init();
+});
