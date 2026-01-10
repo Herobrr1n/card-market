@@ -11,7 +11,7 @@ const CONFIG = {
 console.log('=== ЗАПУСК APP.JS ===');
 
 let tg, userId, username, isMobile = false;
-let isOnline = true;
+let isOnline = true; // Всегда онлайн по умолчанию
 
 // Определяем пользователя из Telegram
 try {
@@ -57,6 +57,7 @@ let userData = {
 
 let marketListings = [];
 let isOpeningPack = false;
+let marketRefreshInterval = null;
 
 // ========== УТИЛИТЫ ==========
 const Utils = {
@@ -76,7 +77,6 @@ const Utils = {
     },
     
     getCardImageUrl(cardId) {
-        // Увеличиваем количество карт до 20
         const actualCardId = ((cardId - 1) % 20) + 1;
         return `images/card${actualCardId}.png`;
     },
@@ -95,7 +95,6 @@ const Utils = {
         const imageUrl = this.getCardImageUrl(cardId);
         img.src = imageUrl;
         
-        // Fallback на SVG если картинки нет
         img.onerror = function() {
             this.onerror = null;
             const svg = this.generateCardSVG(cardId);
@@ -218,38 +217,37 @@ if (!document.querySelector('#app-styles')) {
     document.head.appendChild(style);
 }
 
-// ========== API КЛИЕНТ (ТОЛЬКО СЕРВЕРНЫЕ ВЫЗОВЫ) ==========
+// ========== API КЛИЕНТ (АВТОМАТИЧЕСКИ ПРОБУЕМ СЕРВЕР) ==========
 const API = {
-    async checkOnlineStatus() {
-        try {
-            const response = await fetch(`${CONFIG.BACKEND_URL}/api/debug/ping`);
-            return response.ok;
-        } catch (error) {
-            console.log('Сервер недоступен:', error.message);
-            return false;
-        }
-    },
-    
     async loadUserData() {
         try {
-            console.log(`Загружаю данные пользователя ${userId}...`);
-            const response = await fetch(`${CONFIG.BACKEND_URL}/api/user/${userId}`);
+            console.log(`📥 Загружаю данные пользователя ${userId}...`);
+            const response = await fetch(`${CONFIG.BACKEND_URL}/api/user/${userId}`, {
+                method: 'GET',
+                headers: { 'Accept': 'application/json' }
+            });
             
             if (response.ok) {
                 const data = await response.json();
-                console.log('Данные пользователя загружены:', data);
+                console.log('✅ Данные пользователя загружены:', data);
                 return data;
+            } else {
+                console.log('⚠️ Сервер ответил ошибкой:', response.status);
+                // Если сервер ответил ошибкой, все равно считаем что онлайн
+                // но возвращаем null чтобы создать нового пользователя
+                return null;
             }
-            throw new Error(`Ошибка ${response.status}`);
         } catch (error) {
-            console.warn('Не удалось загрузить данные:', error.message);
+            console.log('⚠️ Не удалось загрузить данные:', error.message);
+            // При ошибке сети все равно продолжаем работу
+            // Сервер синхронизирует данные позже
             return null;
         }
     },
     
     async saveUserData(data) {
         try {
-            console.log('Сохранение данных пользователя...');
+            console.log('💾 Сохраняю данные пользователя...');
             const response = await fetch(`${CONFIG.BACKEND_URL}/api/user/${userId}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -258,36 +256,45 @@ const API = {
             
             if (response.ok) {
                 const result = await response.json();
-                console.log('Данные сохранены:', result);
-                return result.success;
+                console.log('✅ Данные сохранены на сервер');
+                return true;
+            } else {
+                console.log('⚠️ Сервер не принял данные:', response.status);
+                // Продолжаем работу даже если сервер не ответил
+                return false;
             }
-            throw new Error(`Ошибка ${response.status}`);
         } catch (error) {
-            console.warn('Не удалось сохранить данные:', error.message);
+            console.log('⚠️ Ошибка сети при сохранении:', error.message);
+            // Продолжаем работу при ошибке сети
             return false;
         }
     },
     
     async loadMarket() {
         try {
-            console.log('Загружаю маркет...');
-            const response = await fetch(`${CONFIG.BACKEND_URL}/api/market`);
+            console.log('🛒 Загружаю маркет...');
+            const response = await fetch(`${CONFIG.BACKEND_URL}/api/market`, {
+                method: 'GET',
+                headers: { 'Accept': 'application/json' }
+            });
             
             if (response.ok) {
                 const data = await response.json();
-                console.log(`Загружено ${data.length} лотов`);
+                console.log(`✅ Загружено ${data.length} лотов с маркета`);
                 return data;
+            } else {
+                console.log('⚠️ Не удалось загрузить маркет:', response.status);
+                return [];
             }
-            throw new Error(`Ошибка ${response.status}`);
         } catch (error) {
-            console.warn('Не удалось загрузить маркет:', error.message);
+            console.log('⚠️ Ошибка сети при загрузке маркета:', error.message);
             return [];
         }
     },
     
     async createListing(card, price) {
         try {
-            console.log('Создание лота на маркете...', { card, price });
+            console.log('📤 Создаю лот на маркете...', { card, price });
             const response = await fetch(`${CONFIG.BACKEND_URL}/api/market/list`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -302,21 +309,22 @@ const API = {
             
             if (response.ok) {
                 const result = await response.json();
-                console.log('Лот создан:', result);
+                console.log('✅ Лот создан на сервере:', result);
                 return result.listing;
+            } else {
+                const errorData = await response.json().catch(() => ({}));
+                console.log('⚠️ Ошибка создания лота:', errorData);
+                throw new Error(errorData.error || `Ошибка сервера: ${response.status}`);
             }
-            
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.error || `Ошибка ${response.status}`);
         } catch (error) {
-            console.warn('Не удалось создать лот:', error.message);
+            console.log('⚠️ Ошибка сети при создании лота:', error.message);
             throw error;
         }
     },
     
     async buyListing(listingId) {
         try {
-            console.log(`Покупаю лот ${listingId}...`);
+            console.log(`🛒 Покупаю лот ${listingId}...`);
             const response = await fetch(`${CONFIG.BACKEND_URL}/api/market/buy`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -326,55 +334,122 @@ const API = {
                 })
             });
             
-            if (!response.ok) {
+            if (response.ok) {
+                const result = await response.json();
+                console.log('✅ Покупка успешна:', result);
+                return result;
+            } else {
                 const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.error || `Ошибка ${response.status}`);
+                console.log('⚠️ Ошибка покупки:', errorData);
+                throw new Error(errorData.error || `Ошибка сервера: ${response.status}`);
             }
-            
-            const result = await response.json();
-            console.log('Покупка успешна:', result);
-            return result;
         } catch (error) {
-            console.warn('Не удалось купить лот:', error.message);
+            console.log('⚠️ Ошибка сети при покупке:', error.message);
             throw error;
         }
     }
 };
 
-// ========== КЭШ (ТОЛЬКО ДЛЯ ОФЛАЙН-РЕЖИМА) ==========
-const Cache = {
-    saveUserData(data) {
+// ========== ЛОКАЛЬНОЕ ХРАНИЛИЩЕ (ФОНОВАЯ СИНХРОНИЗАЦИЯ) ==========
+const Storage = {
+    getStorageKey() {
+        return `card_game_user_${userId}`;
+    },
+    
+    async saveData() {
         try {
-            const cacheKey = `user_cache_${userId}`;
-            const cacheData = {
-                ...data,
-                cachedAt: new Date().toISOString()
+            const dataToSave = {
+                ...userData,
+                lastSync: new Date().toISOString(),
+                username: username
             };
-            localStorage.setItem(cacheKey, JSON.stringify(cacheData));
-            console.log('Данные сохранены в кэш');
+            
+            localStorage.setItem(this.getStorageKey(), JSON.stringify(dataToSave));
+            console.log('💾 Данные сохранены локально');
+            
+            // Фоновая синхронизация с сервером
+            setTimeout(async () => {
+                try {
+                    await API.saveUserData(dataToSave);
+                } catch (error) {
+                    // Игнорируем ошибки фоновой синхронизации
+                }
+            }, 100);
+            
+            return true;
         } catch (error) {
-            console.warn('Не удалось сохранить в кэш:', error);
+            console.error('❌ Ошибка локального сохранения:', error);
+            return false;
         }
     },
     
-    loadUserData() {
+    async loadData() {
         try {
-            const cacheKey = `user_cache_${userId}`;
-            const data = localStorage.getItem(cacheKey);
+            console.log('📥 Загружаю локальные данные...');
+            
+            // Сначала пытаемся получить с сервера
+            const serverData = await API.loadUserData();
+            
+            // Потом локальные данные
+            const localData = this.loadLocalData();
+            
+            let finalData;
+            
+            if (serverData) {
+                // Если есть данные с сервера, используем их
+                finalData = serverData;
+                console.log('✅ Использую данные с сервера');
+            } else if (localData) {
+                // Если нет данных с сервера, но есть локальные
+                finalData = localData;
+                console.log('✅ Использую локальные данные');
+                
+                // Фоновая синхронизация с сервером
+                setTimeout(async () => {
+                    try {
+                        await API.saveUserData(finalData);
+                    } catch (error) {
+                        // Игнорируем ошибки
+                    }
+                }, 1000);
+            } else {
+                // Создаем нового пользователя
+                finalData = {
+                    balance: CONFIG.INITIAL_BALANCE,
+                    cards: [],
+                    farmStats: { totalClicks: 0 },
+                    username: username,
+                    lastSync: new Date().toISOString()
+                };
+                console.log('🆕 Создан новый пользователь');
+            }
+            
+            return finalData;
+            
+        } catch (error) {
+            console.error('❌ Ошибка загрузки данных:', error);
+            return this.getInitialData();
+        }
+    },
+    
+    loadLocalData() {
+        try {
+            const data = localStorage.getItem(this.getStorageKey());
             return data ? JSON.parse(data) : null;
         } catch (error) {
-            console.warn('Не удалось загрузить из кэша:', error);
+            console.error('❌ Ошибка загрузки локальных данных:', error);
             return null;
         }
     },
     
-    clearCache() {
-        try {
-            localStorage.removeItem(`user_cache_${userId}`);
-            console.log('Кэш очищен');
-        } catch (error) {
-            console.warn('Не удалось очистить кэш:', error);
-        }
+    getInitialData() {
+        return {
+            balance: CONFIG.INITIAL_BALANCE,
+            cards: [],
+            farmStats: { totalClicks: 0 },
+            username: username,
+            lastSync: new Date().toISOString()
+        };
     }
 };
 
@@ -429,7 +504,7 @@ const Roulette = {
             // 40 карточек для анимации (20 уникальных карт)
             const totalCards = 40;
             for (let i = 0; i < totalCards; i++) {
-                const cardId = (i % 20) + 1; // 20 карт
+                const cardId = (i % 20) + 1;
                 const img = Utils.createCardImage(cardId, '160px', '190px');
                 img.style.margin = '0 15px';
                 img.style.width = '160px';
@@ -446,7 +521,7 @@ const Roulette = {
                 resultText.innerHTML = '🎡 <b>РУЛЕТКА ЗАПУЩЕНА!</b>';
                 
                 const winnerIndex = 25 + Math.floor(Math.random() * 10);
-                const winnerCardId = (winnerIndex % 20) + 1; // 20 карт
+                const winnerCardId = (winnerIndex % 20) + 1;
                 const rarities = ['common', 'common', 'rare', 'epic', 'legendary'];
                 const rarity = rarities[Math.floor(Math.random() * rarities.length)];
                 
@@ -659,7 +734,7 @@ const UI = {
                 ">
                     <div style="font-size: 48px; margin-bottom: 15px;">🏪</div>
                     <h3 style="color: #cbd5e1; margin-bottom: 10px;">Маркет пуст</h3>
-                    <p>Другие игроки еще не выставили карты на продажу</p>
+                    <p>Будьте первым, кто выставит карту на продажу!</p>
                 </div>
             `;
             return;
@@ -753,7 +828,7 @@ const UI = {
     }
 };
 
-// ========== ОСНОВНЫЕ ФУНКЦИИ ==========
+// ========== ОСНОВНЫЕ ФУНКЦИИ (ВСЕГДА ПЫТАЕМСЯ СЕРВЕР) ==========
 async function sellCard(cardId) {
     console.log('🛒 Продажа карты:', cardId);
     
@@ -781,10 +856,7 @@ async function sellCard(cardId) {
         suggestedPrice.toString()
     );
     
-    if (!priceInput) {
-        console.log('❌ Продажа отменена');
-        return;
-    }
+    if (!priceInput) return;
     
     const price = parseInt(priceInput);
     if (isNaN(price) || price < CONFIG.MIN_SELL_PRICE || price > CONFIG.MAX_SELL_PRICE) {
@@ -792,46 +864,42 @@ async function sellCard(cardId) {
         return;
     }
     
-    if (!confirm(`🎴 Выставить карту #${card.cardId} на продажу за ${Utils.formatNumber(price)} хериков?\n\nПродавец: @${username}`)) {
+    if (!confirm(`🎴 Выставить карту #${card.cardId} на продажу за ${Utils.formatNumber(price)} хериков?\n\nПродавец: @${username}\n\nКарта появится на общем онлайн-маркете!`)) {
         return;
     }
     
-    Utils.showNotification('🔄 Создаем лот на онлайн-маркете...', 'info');
+    Utils.showNotification('🔄 Публикуем на онлайн-маркет...', 'info');
     
     try {
-        // ВАЖНО: ТОЛЬКО СЕРВЕРНЫЙ ВЫЗОВ
+        // Всегда пытаемся создать лот на сервере
         const listing = await API.createListing(card, price);
         
         if (!listing) {
-            throw new Error('Сервер не ответил');
+            throw new Error('Не удалось создать лот на сервере');
         }
         
         // Удаляем карту у себя
         userData.cards = userData.cards.filter(c => c.id !== cardId);
         
+        // Сохраняем данные
+        await Storage.saveData();
+        
         // Обновляем интерфейс
         UI.displayUserCards();
         
-        // Загружаем свежий маркет с сервера
-        marketListings = await API.loadMarket();
-        UI.displayMarket();
-        
-        // Сохраняем данные на сервер
-        const saveSuccess = await API.saveUserData(userData);
-        if (saveSuccess) {
-            Cache.saveUserData(userData);
-        }
+        // Обновляем маркет
+        await refreshMarket();
         
         Utils.showNotification(
             `✅ Карта выставлена на онлайн-маркет за ${Utils.formatNumber(price)} хериков!\n` +
-            `Другие игроки увидят её через несколько секунд.`, 
+            `Другие игроки уже видят её в маркете!`, 
             'success'
         );
         
     } catch (error) {
         console.error('❌ Ошибка продажи:', error);
         Utils.showNotification(
-            `❌ Не удалось выставить карту на маркет.\nПроверьте подключение к серверу.`, 
+            `❌ Не удалось выставить карту: ${error.message}\nПопробуйте позже.`, 
             'error'
         );
     }
@@ -869,7 +937,7 @@ async function buyMarketCard(listingId) {
     Utils.showNotification('🔄 Обрабатываем покупку...', 'info');
     
     try {
-        // ВАЖНО: ТОЛЬКО СЕРВЕРНЫЙ ВЫЗОВ
+        // Всегда пытаемся купить через сервер
         const result = await API.buyListing(listingId);
         
         if (!result || !result.success) {
@@ -882,19 +950,15 @@ async function buyMarketCard(listingId) {
         // Добавляем карту
         userData.cards.push(result.card);
         
+        // Сохраняем данные
+        await Storage.saveData();
+        
         // Обновляем интерфейс
         UI.updateProfile();
         UI.displayUserCards();
         
-        // Обновляем маркет с сервера
-        marketListings = await API.loadMarket();
-        UI.displayMarket();
-        
-        // Сохраняем данные на сервер
-        const saveSuccess = await API.saveUserData(userData);
-        if (saveSuccess) {
-            Cache.saveUserData(userData);
-        }
+        // Обновляем маркет
+        await refreshMarket();
         
         Utils.showNotification(
             `🎉 Вы купили карту #${listing.cardId} за ${Utils.formatNumber(listing.price)} хериков!\n` +
@@ -905,13 +969,24 @@ async function buyMarketCard(listingId) {
     } catch (error) {
         console.error('❌ Ошибка покупки:', error);
         Utils.showNotification(
-            `❌ Не удалось купить карту: ${error.message}\nПроверьте подключение.`, 
+            `❌ Не удалось купить карту: ${error.message}\nПопробуйте позже.`, 
             'error'
         );
     }
 }
 
-// ========== ИНИЦИАЛИЗАЦИЯ КНОПОК ==========
+// ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
+async function refreshMarket() {
+    try {
+        const newMarket = await API.loadMarket();
+        marketListings = newMarket;
+        UI.displayMarket();
+        console.log('🔄 Маркет обновлен');
+    } catch (error) {
+        console.log('⚠️ Не удалось обновить маркет:', error.message);
+    }
+}
+
 function initFarmButton() {
     const farmBtn = document.getElementById('farmHeriks');
     if (farmBtn) {
@@ -932,14 +1007,14 @@ function initFarmButton() {
             
             UI.updateProfile();
             
-            try {
-                const saveSuccess = await API.saveUserData(userData);
-                if (saveSuccess) {
-                    Cache.saveUserData(userData);
+            // Фоновое сохранение
+            setTimeout(async () => {
+                try {
+                    await Storage.saveData();
+                } catch (error) {
+                    console.log('⚠️ Не удалось сохранить:', error.message);
                 }
-            } catch (saveError) {
-                console.warn('Не удалось сохранить на сервер:', saveError);
-            }
+            }, 100);
         });
     }
 }
@@ -969,10 +1044,8 @@ function initOpenPackButton() {
                 
                 UI.displayUserCards();
                 
-                const saveSuccess = await API.saveUserData(userData);
-                if (saveSuccess) {
-                    Cache.saveUserData(userData);
-                }
+                // Сохраняем данные
+                await Storage.saveData();
                 
             } catch (error) {
                 console.error('Ошибка открытия пака:', error);
@@ -1000,76 +1073,49 @@ async function initApp() {
     console.log('=== НАЧАЛО ЗАГРУЗКИ ===');
     
     try {
-        isOnline = await API.checkOnlineStatus();
-        console.log(`🌐 Статус сервера: ${isOnline ? 'ОНЛАЙН' : 'ОФЛАЙН'}`);
+        console.log('🌐 ПРЕДПОЛАГАЕМ, ЧТО СЕРВЕР ОНЛАЙН');
         
-        if (isOnline) {
-            // Загружаем с сервера
-            userData = await API.loadUserData();
-            marketListings = await API.loadMarket();
-            
-            if (!userData) {
-                userData = {
-                    balance: CONFIG.INITIAL_BALANCE,
-                    cards: [],
-                    farmStats: { totalClicks: 0 },
-                    username: username
-                };
-            }
-            
-            Cache.saveUserData(userData);
-            
-        } else {
-            // Офлайн режим
-            Utils.showNotification('⚠️ Сервер недоступен. Работаем в офлайн-режиме.', 'warning');
-            userData = Cache.loadUserData() || {
-                balance: CONFIG.INITIAL_BALANCE,
-                cards: [],
-                farmStats: { totalClicks: 0 },
-                username: username
-            };
-            marketListings = [];
-        }
+        // Всегда предполагаем, что сервер онлайн
+        // Просто пытаемся загрузить данные
+        userData = await Storage.loadData();
+        marketListings = await API.loadMarket();
         
+        console.log('✅ Данные загружены');
+        console.log('- Баланс:', userData.balance);
+        console.log('- Карт:', userData.cards.length);
+        console.log('- Лотов на маркете:', marketListings.length);
+        
+        // Обновляем интерфейс
         UI.updateProfile();
         UI.displayUserCards();
         UI.displayMarket();
         
+        // Инициализируем кнопки
         initFarmButton();
         initOpenPackButton();
         initCloseRouletteButton();
         
-        // Автообновление маркета (только онлайн)
-        if (isOnline) {
-            setInterval(async () => {
-                try {
-                    const newMarket = await API.loadMarket();
-                    if (JSON.stringify(newMarket) !== JSON.stringify(marketListings)) {
-                        marketListings = newMarket;
-                        UI.displayMarket();
-                        console.log('🔄 Маркет обновлен');
-                    }
-                } catch (error) {
-                    console.warn('Ошибка обновления маркета:', error);
-                }
-            }, 10000); // Каждые 10 секунд
+        // Запускаем автообновление маркета
+        if (marketRefreshInterval) {
+            clearInterval(marketRefreshInterval);
         }
+        
+        marketRefreshInterval = setInterval(async () => {
+            await refreshMarket();
+        }, 10000); // Каждые 10 секунд
         
         console.log('=== ПРИЛОЖЕНИЕ УСПЕШНО ЗАГРУЖЕНО ===');
         
+        // Показываем приветствие
         setTimeout(() => {
-            if (isOnline) {
-                Utils.showNotification(`👋 Добро пожаловать, @${username}!\n✅ Онлайн-маркет доступен`, 'success');
-            } else {
-                Utils.showNotification(`👋 Добро пожаловать, @${username}!`, 'info');
-            }
+            Utils.showNotification(`👋 Добро пожаловать, @${username}!`, 'success');
         }, 1000);
         
     } catch (error) {
         console.error('❌ Ошибка загрузки приложения:', error);
-        Utils.showNotification('⚠️ Ошибка загрузки приложения', 'error');
         
-        userData = Cache.loadUserData() || {
+        // Даже при ошибке показываем приложение
+        userData = {
             balance: CONFIG.INITIAL_BALANCE,
             cards: [],
             farmStats: { totalClicks: 0 },
@@ -1084,6 +1130,8 @@ async function initApp() {
         initFarmButton();
         initOpenPackButton();
         initCloseRouletteButton();
+        
+        Utils.showNotification(`👋 Добро пожаловать, @${username}!`, 'success');
     }
 }
 
