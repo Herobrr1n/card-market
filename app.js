@@ -7,7 +7,7 @@ const CONFIG = {
 };
 
 // ========== ИНИЦИАЛИЗАЦИЯ ==========
-console.log('=== ИНИЦИАЛИЗАЦИЯ ===');
+console.log('=== ЗАПУСК APP.JS ===');
 
 let tg, userId, username, isMobile = false;
 
@@ -15,7 +15,7 @@ let tg, userId, username, isMobile = false;
 try {
     tg = window.Telegram?.WebApp;
     if (tg) {
-        console.log('✅ Telegram WebApp найден');
+        console.log('Telegram WebApp найден');
         tg.expand();
         tg.ready();
         
@@ -27,7 +27,7 @@ try {
             username = 'guest_' + Math.floor(Math.random() * 1000);
         }
     } else {
-        console.log('🌐 Браузерный режим');
+        console.log('Браузерный режим');
         userId = 'browser_' + Date.now();
         username = 'browser_user';
     }
@@ -38,7 +38,7 @@ try {
 }
 
 isMobile = window.innerWidth <= 768;
-console.log('👤 Пользователь:', { userId, username, isMobile });
+console.log('Пользователь:', { userId, username, isMobile });
 
 // Глобальные переменные
 let userData = {
@@ -49,294 +49,6 @@ let userData = {
 
 let marketListings = [];
 let isOpeningPack = false;
-
-// ========== ПРОСТОЕ ХРАНИЛИЩЕ ==========
-const Storage = {
-    getStorageKey() {
-        return `card_game_${userId}`;
-    },
-    
-    async loadData() {
-        try {
-            console.log('📥 Загрузка данных...');
-            
-            // 1. Пытаемся загрузить с сервера
-            try {
-                const serverData = await API.loadUserData();
-                if (serverData) {
-                    console.log('✅ Данные с сервера загружены');
-                    localStorage.setItem(this.getStorageKey(), JSON.stringify(serverData));
-                    return serverData;
-                }
-            } catch (serverError) {
-                console.warn('Сервер недоступен:', serverError.message);
-            }
-            
-            // 2. Загружаем из localStorage
-            const localData = localStorage.getItem(this.getStorageKey());
-            if (localData) {
-                console.log('✅ Данные из localStorage загружены');
-                return JSON.parse(localData);
-            }
-            
-            // 3. Создаем начальные данные
-            console.log('🆕 Созданы начальные данные');
-            return {
-                balance: 100,
-                cards: [],
-                farmStats: { totalClicks: 0 },
-                username: username
-            };
-            
-        } catch (error) {
-            console.error('❌ Ошибка загрузки данных:', error);
-            return {
-                balance: 100,
-                cards: [],
-                farmStats: { totalClicks: 0 }
-            };
-        }
-    },
-    
-    async saveData() {
-        try {
-            console.log('💾 Сохранение данных...');
-            
-            const dataToSave = {
-                ...userData,
-                username: username,
-                lastSaved: new Date().toISOString()
-            };
-            
-            // Сохраняем локально
-            localStorage.setItem(this.getStorageKey(), JSON.stringify(dataToSave));
-            console.log('✅ Данные сохранены локально');
-            
-            // Пытаемся сохранить на сервер
-            try {
-                await API.saveUserData(dataToSave);
-                console.log('✅ Данные сохранены на сервер');
-            } catch (e) {
-                console.warn('⚠️ Не удалось сохранить на сервер:', e.message);
-            }
-            
-            return true;
-        } catch (error) {
-            console.error('❌ Ошибка сохранения:', error);
-            return false;
-        }
-    }
-};
-
-// ========== API ==========
-const API = {
-    async loadUserData() {
-        try {
-            console.log(`📡 Запрос данных пользователя: ${userId}`);
-            const response = await fetch(`${CONFIG.BACKEND_URL}/api/user/${userId}`, {
-                headers: { 'Cache-Control': 'no-cache' }
-            });
-            
-            if (response.ok) {
-                const data = await response.json();
-                console.log('✅ Сервер вернул данные');
-                return data;
-            } else if (response.status === 404) {
-                console.log('🆕 Пользователь не найден на сервере');
-                return null;
-            } else {
-                throw new Error(`HTTP ${response.status}`);
-            }
-        } catch (error) {
-            console.warn('⚠️ Ошибка запроса данных:', error.message);
-            throw error;
-        }
-    },
-    
-    async saveUserData(data) {
-        try {
-            const response = await fetch(`${CONFIG.BACKEND_URL}/api/user/${userId}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data)
-            });
-            
-            if (response.ok) {
-                return true;
-            } else {
-                throw new Error(`HTTP ${response.status}`);
-            }
-        } catch (error) {
-            throw error;
-        }
-    },
-    
-    async loadMarket() {
-        try {
-            console.log('🛒 Загрузка маркета...');
-            const response = await fetch(`${CONFIG.BACKEND_URL}/api/market`, {
-                headers: { 'Cache-Control': 'no-cache' }
-            });
-            
-            if (response.ok) {
-                const data = await response.json();
-                console.log(`✅ Загружено ${data.length} лотов`);
-                
-                // Добавляем демо-лоты если мало
-                if (data.length < 20) {
-                    const demoListings = this.generateDemoListings(20 - data.length);
-                    return [...data, ...demoListings];
-                }
-                
-                return data;
-            } else {
-                // Генерируем демо-данные если сервер недоступен
-                console.log('🔄 Генерирую демо-маркет');
-                return this.generateDemoListings(20);
-            }
-        } catch (error) {
-            console.warn('⚠️ Ошибка загрузки маркета, использую демо-данные:', error.message);
-            return this.generateDemoListings(20);
-        }
-    },
-    
-    generateDemoListings(count) {
-        console.log(`🎲 Генерация ${count} демо-лотков...`);
-        const listings = [];
-        const sellers = ['Алексей', 'Мария', 'Дмитрий', 'Анна', 'Сергей'];
-        
-        for (let i = 0; i < count; i++) {
-            const cardId = Math.floor(Math.random() * 10) + 1;
-            const rarity = this.getRandomRarity();
-            const price = this.calculatePrice(rarity, cardId);
-            const seller = sellers[Math.floor(Math.random() * sellers.length)];
-            
-            listings.push({
-                id: `demo_${Date.now()}_${i}`,
-                sellerId: `seller_${Math.floor(Math.random() * 1000)}`,
-                sellerName: seller,
-                cardId: cardId,
-                rarity: rarity,
-                price: price,
-                createdAt: new Date().toISOString(),
-                isDemo: true
-            });
-        }
-        
-        console.log(`✅ Сгенерировано ${listings.length} лотов`);
-        return listings;
-    },
-    
-    getRandomRarity() {
-        const random = Math.random() * 100;
-        if (random < 50) return 'common';      // 50%
-        if (random < 80) return 'rare';        // 30%
-        if (random < 95) return 'epic';        // 15%
-        return 'legendary';                     // 5%
-    },
-    
-    calculatePrice(rarity, cardId) {
-        const basePrices = {
-            common: { min: 10, max: 50 },
-            rare: { min: 50, max: 200 },
-            epic: { min: 200, max: 500 },
-            legendary: { min: 500, max: 1000 }
-        };
-        
-        const range = basePrices[rarity] || basePrices.common;
-        let price = range.min + Math.random() * (range.max - range.min);
-        
-        // Увеличиваем цену за более высокий номер карты
-        price *= (1 + cardId / 20);
-        
-        // Округляем до десятков
-        price = Math.round(price / 10) * 10;
-        
-        return Math.max(10, Math.min(10000, price));
-    },
-    
-    async createListing(card, price) {
-        try {
-            const response = await fetch(`${CONFIG.BACKEND_URL}/api/market/list`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    sellerId: userId,
-                    sellerName: username,
-                    cardId: card.cardId,
-                    rarity: card.rarity,
-                    price: price
-                })
-            });
-            
-            if (response.ok) {
-                return await response.json();
-            }
-        } catch (error) {
-            console.warn('Ошибка создания лота:', error);
-        }
-        return null;
-    },
-    
-    async buyListing(listingId) {
-        try {
-            const response = await fetch(`${CONFIG.BACKEND_URL}/api/market/buy`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    buyerId: userId,
-                    listingId: listingId
-                })
-            });
-            
-            if (response.ok) {
-                return await response.json();
-            }
-        } catch (error) {
-            console.warn('Ошибка покупки:', error);
-        }
-        return null;
-    },
-    
-    async openPack() {
-        try {
-            const response = await fetch(`${CONFIG.BACKEND_URL}/api/open-pack`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    userId: userId,
-                    cost: CONFIG.PACK_COST 
-                })
-            });
-            
-            if (response.ok) {
-                return await response.json();
-            }
-        } catch (error) {
-            console.warn('Ошибка открытия пака:', error);
-        }
-        
-        // Локальная генерация если сервер недоступен
-        return this.generateRandomCard();
-    },
-    
-    generateRandomCard() {
-        const cardId = Math.floor(Math.random() * 10) + 1;
-        const rarity = this.getRandomRarity();
-        
-        return {
-            success: true,
-            card: {
-                id: 'card_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-                cardId: cardId,
-                rarity: rarity,
-                name: `Карта #${cardId}`,
-                ownerId: userId,
-                obtainedAt: new Date().toISOString()
-            }
-        };
-    }
-};
 
 // ========== УТИЛИТЫ ==========
 const Utils = {
@@ -361,8 +73,8 @@ const Utils = {
     createCardImage(cardId, width = '100%', height = '140px') {
         const img = document.createElement('img');
         img.alt = `Card ${cardId}`;
-        img.style.width = width;
-        img.style.height = height;
+        img.style.width = isMobile ? '100%' : width;
+        img.style.height = isMobile ? '120px' : height;
         img.style.objectFit = 'cover';
         img.style.borderRadius = '8px';
         img.style.border = '1px solid #334155';
@@ -370,7 +82,7 @@ const Utils = {
         img.src = this.getCardImageUrl(cardId);
         
         img.onerror = () => {
-            img.src = `https://via.placeholder.com/150x200/1e293b/ffffff?text=Card+${cardId}`;
+            img.src = `https://via.placeholder.com/${isMobile ? '120x160' : '150x200'}/1e293b/ffffff?text=Card+${cardId}`;
         };
         
         return img;
@@ -433,6 +145,156 @@ if (!document.querySelector('#app-styles')) {
     `;
     document.head.appendChild(style);
 }
+
+// ========== API ==========
+const API = {
+    async loadUserData() {
+        try {
+            console.log('Запрос данных пользователя...');
+            const response = await fetch(`${CONFIG.BACKEND_URL}/api/user/${userId}`);
+            
+            if (response.ok) {
+                const data = await response.json();
+                console.log('Данные получены с сервера');
+                return data;
+            } else {
+                console.log('Сервер вернул ошибку:', response.status);
+                return this.getDefaultUserData();
+            }
+        } catch (error) {
+            console.warn('Ошибка загрузки данных:', error.message);
+            return this.getDefaultUserData();
+        }
+    },
+    
+    getDefaultUserData() {
+        return {
+            balance: 100,
+            cards: [],
+            farmStats: { totalClicks: 0 },
+            username: username
+        };
+    },
+    
+    async saveUserData(data) {
+        try {
+            const response = await fetch(`${CONFIG.BACKEND_URL}/api/user/${userId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            return response.ok;
+        } catch (error) {
+            console.warn('Ошибка сохранения:', error.message);
+            return false;
+        }
+    },
+    
+    async loadMarket() {
+        try {
+            console.log('Загрузка маркета...');
+            const response = await fetch(`${CONFIG.BACKEND_URL}/api/market`);
+            
+            if (response.ok) {
+                const data = await response.json();
+                console.log(`Получено ${data.length} лотов с сервера`);
+                
+                // Если мало лотов, добавляем демо
+                if (data.length < 20) {
+                    const demo = this.generateDemoListings(20 - data.length);
+                    return [...data, ...demo];
+                }
+                return data;
+            }
+            
+            // Если сервер недоступен, создаем демо-данные
+            console.log('Создаю демо-маркет');
+            return this.generateDemoListings(20);
+            
+        } catch (error) {
+            console.warn('Ошибка загрузки маркета:', error.message);
+            return this.generateDemoListings(20);
+        }
+    },
+    
+    generateDemoListings(count) {
+        const listings = [];
+        const sellers = ['Игрок1', 'Игрок2', 'Игрок3', 'Игрок4', 'Игрок5'];
+        
+        for (let i = 0; i < count; i++) {
+            const cardId = Math.floor(Math.random() * 10) + 1;
+            const rarities = ['common', 'common', 'rare', 'epic', 'legendary'];
+            const rarity = rarities[Math.floor(Math.random() * rarities.length)];
+            const price = this.calculatePrice(rarity, cardId);
+            
+            listings.push({
+                id: `demo_${Date.now()}_${i}`,
+                sellerId: `seller_${i}`,
+                sellerName: sellers[Math.floor(Math.random() * sellers.length)],
+                cardId: cardId,
+                rarity: rarity,
+                price: price,
+                isDemo: true
+            });
+        }
+        
+        console.log(`Сгенерировано ${listings.length} демо-лотков`);
+        return listings;
+    },
+    
+    calculatePrice(rarity, cardId) {
+        const base = {
+            common: 50,
+            rare: 200,
+            epic: 500,
+            legendary: 1000
+        };
+        return Math.floor((base[rarity] || 50) * (1 + cardId / 20));
+    },
+    
+    async createListing(card, price) {
+        try {
+            const response = await fetch(`${CONFIG.BACKEND_URL}/api/market/list`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sellerId: userId,
+                    sellerName: username,
+                    cardId: card.cardId,
+                    rarity: card.rarity,
+                    price: price
+                })
+            });
+            
+            if (response.ok) {
+                return await response.json();
+            }
+        } catch (error) {
+            console.warn('Ошибка создания лота:', error);
+        }
+        return null;
+    },
+    
+    async buyListing(listingId) {
+        try {
+            const response = await fetch(`${CONFIG.BACKEND_URL}/api/market/buy`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    buyerId: userId,
+                    listingId: listingId
+                })
+            });
+            
+            if (response.ok) {
+                return await response.json();
+            }
+        } catch (error) {
+            console.warn('Ошибка покупки:', error);
+        }
+        return null;
+    }
+};
 
 // ========== ИНТЕРФЕЙС ==========
 const UI = {
@@ -684,7 +546,8 @@ const Roulette = {
                 setTimeout(() => {
                     const winnerIndex = Math.floor(Math.random() * 15) + 3;
                     const winnerCardId = (winnerIndex % 10) + 1;
-                    const rarity = API.getRandomRarity();
+                    const rarities = ['common', 'common', 'rare', 'epic', 'legendary'];
+                    const rarity = rarities[Math.floor(Math.random() * rarities.length)];
                     
                     const cardWidth = 150 + 20;
                     const targetPosition = -(winnerIndex * cardWidth) + (rouletteDiv.offsetWidth / 2) - (cardWidth / 2);
@@ -763,7 +626,7 @@ async function sellCard(cardId) {
         
         UI.displayUserCards();
         UI.displayMarket();
-        await Storage.saveData();
+        await API.saveUserData(userData);
         
         Utils.showNotification(
             `✅ Карта выставлена на маркет за ${Utils.formatNumber(price)} хериков!`, 
@@ -809,7 +672,7 @@ async function buyMarketCard(listingId) {
         UI.updateProfile();
         UI.displayUserCards();
         UI.displayMarket();
-        await Storage.saveData();
+        await API.saveUserData(userData);
         
         Utils.showNotification(
             `🎉 Вы купили карту #${listing.cardId} за ${Utils.formatNumber(listing.price)} хериков!`, 
@@ -840,7 +703,7 @@ function initFarmButton() {
             userData.farmStats.totalClicks = (userData.farmStats.totalClicks || 0) + 1;
             
             UI.updateProfile();
-            await Storage.saveData();
+            await API.saveUserData(userData);
         });
     }
 }
@@ -869,7 +732,7 @@ function initOpenPackButton() {
                 userData.cards.push(wonCard);
                 
                 UI.displayUserCards();
-                await Storage.saveData();
+                await API.saveUserData(userData);
                 
                 Utils.showNotification(`🎉 Получена ${wonCard.rarity} карта #${wonCard.cardId}!`, 'success');
                 
@@ -896,37 +759,40 @@ function initCloseRouletteButton() {
 
 // ========== ЗАГРУЗКА ПРИЛОЖЕНИЯ ==========
 async function initApp() {
-    console.log('=== ЗАГРУЗКА ДАННЫХ ===');
+    console.log('=== НАЧАЛО ЗАГРУЗКИ ===');
     
     try {
-        // Загружаем данные пользователя
-        userData = await Storage.loadData();
-        console.log('✅ Данные загружены:', userData);
+        // 1. Загружаем данные пользователя
+        const loadedUserData = await API.loadUserData();
+        if (loadedUserData) {
+            userData = loadedUserData;
+        }
+        console.log('Данные пользователя загружены');
         
-        // Загружаем маркет
+        // 2. Загружаем маркет
         marketListings = await API.loadMarket();
-        console.log(`✅ Маркет загружен: ${marketListings.length} лотов`);
+        console.log(`Маркет загружен: ${marketListings.length} лотов`);
         
-        // Обновляем интерфейс
+        // 3. Обновляем интерфейс
         UI.updateProfile();
         UI.displayUserCards();
         UI.displayMarket();
         
-        // Инициализируем кнопки
+        // 4. Инициализируем кнопки
         initFarmButton();
         initOpenPackButton();
         initCloseRouletteButton();
         
-        // Автосохранение
+        // 5. Автосохранение каждые 30 секунд
         setInterval(async () => {
-            await Storage.saveData();
+            await API.saveUserData(userData);
             console.log('💾 Автосохранение выполнено');
         }, 30000);
         
-        console.log('=== ПРИЛОЖЕНИЕ ЗАПУЩЕНО ===');
+        console.log('=== ПРИЛОЖЕНИЕ УСПЕШНО ЗАГРУЖЕНО ===');
         
     } catch (error) {
-        console.error('❌ Критическая ошибка при запуске:', error);
+        console.error('КРИТИЧЕСКАЯ ОШИБКА:', error);
         Utils.showNotification('Ошибка загрузки приложения', 'error');
     }
 }
