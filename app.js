@@ -55,29 +55,53 @@ const API = {
     // Загрузка данных пользователя
     async loadUserData() {
         try {
+            console.log(`📥 Загрузка данных пользователя ${userId}...`);
             const response = await fetch(`${CONFIG.BACKEND_URL}/api/user/${userId}`);
+            
             if (response.ok) {
                 const data = await response.json();
                 console.log('✅ Данные пользователя загружены:', data);
-                return data;
+                
+                // Если на сервере есть данные, используем их
+                if (data && Object.keys(data).length > 0) {
+                    return data;
+                }
+            } else {
+                console.warn(`⚠️ Сервер вернул ошибку ${response.status}`);
             }
         } catch (error) {
-            console.warn('⚠️ Не удалось загрузить данные, использую локальные:', error);
+            console.warn('⚠️ Не удалось загрузить данные с сервера:', error);
         }
-        return null;
+        
+        // Возвращаем начальные данные для нового пользователя
+        console.log('🆕 Созданы начальные данные для нового пользователя');
+        return {
+            balance: 100,
+            cards: [],
+            farmStats: { totalClicks: 0 }
+        };
     },
     
     // Сохранение данных пользователя
     async saveUserData() {
         try {
+            console.log(`💾 Сохранение данных пользователя ${userId}...`);
             const response = await fetch(`${CONFIG.BACKEND_URL}/api/user/${userId}`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
                 body: JSON.stringify(userData)
             });
+            
             if (response.ok) {
                 console.log('✅ Данные пользователя сохранены');
                 return true;
+            } else {
+                console.warn(`⚠️ Сервер вернул ошибку ${response.status} при сохранении`);
+                const errorText = await response.text();
+                console.warn('Текст ошибки:', errorText);
             }
         } catch (error) {
             console.warn('⚠️ Не удалось сохранить данные:', error);
@@ -88,10 +112,11 @@ const API = {
     // Загрузка маркета
     async loadMarket() {
         try {
+            console.log('🛒 Загрузка маркета...');
             const response = await fetch(`${CONFIG.BACKEND_URL}/api/market`);
             if (response.ok) {
                 const data = await response.json();
-                console.log('✅ Маркет загружен:', data);
+                console.log('✅ Маркет загружен, лотов:', data.length);
                 return data;
             }
         } catch (error) {
@@ -101,21 +126,31 @@ const API = {
     },
     
     // Создание лота на маркете
-    async createListing(cardId, price) {
+    async createListing(card, price) {
         try {
+            console.log(`🏷️ Создание лота для карты ${card.cardId} за ${price}...`);
             const response = await fetch(`${CONFIG.BACKEND_URL}/api/market/list`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
                 body: JSON.stringify({
                     sellerId: userId,
                     sellerName: username,
-                    cardId,
-                    price
+                    cardId: card.cardId,
+                    rarity: card.rarity,
+                    price: price
                 })
             });
+            
             if (response.ok) {
-                console.log('✅ Лот создан');
-                return await response.json();
+                const data = await response.json();
+                console.log('✅ Лот создан:', data);
+                return data;
+            } else {
+                const errorText = await response.text();
+                console.warn(`⚠️ Ошибка создания лота ${response.status}:`, errorText);
             }
         } catch (error) {
             console.warn('⚠️ Не удалось создать лот:', error);
@@ -126,18 +161,26 @@ const API = {
     // Покупка карты с маркета
     async buyListing(listingId) {
         try {
+            console.log(`🛒 Покупка лота ${listingId}...`);
             const response = await fetch(`${CONFIG.BACKEND_URL}/api/market/buy`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
                 body: JSON.stringify({
                     buyerId: userId,
-listingId
+                    listingId: listingId
                 })
             });
+            
             if (response.ok) {
                 const data = await response.json();
                 console.log('✅ Карта куплена:', data);
                 return data;
+            } else {
+                const errorText = await response.text();
+                console.warn(`⚠️ Ошибка покупки ${response.status}:`, errorText);
             }
         } catch (error) {
             console.warn('⚠️ Не удалось купить карту:', error);
@@ -148,21 +191,30 @@ listingId
     // Открытие пака
     async openPack() {
         try {
+            console.log('🎁 Открытие пака...');
             const response = await fetch(`${CONFIG.BACKEND_URL}/api/open-pack`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId })
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({ 
+                    userId: userId,
+                    cost: CONFIG.PACK_COST 
+                })
             });
+            
             if (response.ok) {
                 const data = await response.json();
                 console.log('✅ Пак открыт:', data);
                 return data;
             }
         } catch (error) {
-            console.warn('⚠️ Не удалось открыть пак, использую локальную логику:', error);
+            console.warn('⚠️ Не удалось открыть пак через API:', error);
         }
         
         // Локальная логика если бэкенд недоступен
+        console.log('🔄 Использую локальную генерацию карты');
         return this.generateRandomCard();
     },
     
@@ -173,14 +225,14 @@ listingId
         const rarity = rarities[Math.floor(Math.random() * rarities.length)];
         
         return {
+            success: true,
             card: {
-                id: 'card_' + Date.now() + '_' + Math.random(),
-                cardId,
-                rarity,
+                id: 'card_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+                cardId: cardId,
+                rarity: rarity,
                 name: `Карта #${cardId}`,
                 ownerId: userId
-            },
-            success: true
+            }
         };
     }
 };
@@ -205,39 +257,81 @@ const Utils = {
     
     // Генерация URL картинки
     getCardImageUrl(cardId) {
-        // Пробуем разные пути
-        const paths = [
-            `images/card${cardId}.png`,
-            `./images/card${cardId}.png`,
-            `/images/card${cardId}.png`,
-            `frontend/images/card${cardId}.png`
-        ];
-        
-        // Возвращаем первый валидный путь
-        return paths[0];
+        return `images/card${cardId}.png`;
     },
     
     // Создание элемента картинки с fallback
     createCardImage(cardId, className = '', width = '100%', height = '140px') {
         const img = document.createElement('img');
         img.className = className;
-        img.alt = `Card ${cardId}`;
+        img.alt = `Card ${cardId};
         img.style.width = width;
         img.style.height = height;
         img.style.objectFit = 'cover';
         img.style.borderRadius = '8px';
         
         const imageUrl = this.getCardImageUrl(cardId);
-        img.src = imageUrl;
+        img.src = imageUrl;`
         
         // Fallback если картинка не загрузилась
         img.onerror = () => {
             console.warn(`Картинка card${cardId}.png не найдена, использую placeholder`);
             img.src = `https://via.placeholder.com/150x200/1e293b/ffffff?text=Card+${cardId}`;
-            img.onerror = null; // Предотвращаем бесконечный цикл
+            img.onerror = null;
         };
         
         return img;
+    },
+    
+    // Показать уведомление
+    showNotification(message, type = 'info') {
+        const notification = document.createElement('div');
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            background: ${type === 'success' ? '#22c55e' : type === 'error' ? '#ef4444' : '#3b82f6'};
+            color: white;
+            border-radius: 8px;
+            z-index: 10000;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            animation: slideIn 0.3s ease;
+        `;
+        
+        notification.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 20px;">
+                    ${type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'}
+                </span>
+                <span>${message}</span>
+            </div>
+        `;
+        
+        document.body.appendChild(notification);
+        
+        // Автоудаление через 3 секунды
+        setTimeout(() => {
+            notification.style.animation = 'slideOut 0.3s ease';
+            setTimeout(() => notification.remove(), 300);
+        }, 3000);
+        
+        // Добавляем стили для анимации если их нет
+        if (!document.querySelector('#notification-styles')) {
+            const style = document.createElement('style');
+            style.id = 'notification-styles';
+            style.textContent = `
+                @keyframes slideIn {
+                    from { transform: translateX(100%); opacity: 0; }
+                    to { transform: translateX(0); opacity: 1; }
+                }
+                @keyframes slideOut {
+                    from { transform: translateX(0); opacity: 1; }
+                    to { transform: translateX(100%); opacity: 0; }
+                }
+            `;
+            document.head.appendChild(style);
+        }
     }
 };
 
@@ -266,7 +360,7 @@ const UI = {
                 <div style="
                     text-align: center;
                     padding: 40px;
-                    background: #1e293b;
+  background: #1e293b;
                     border-radius: 15px;
                     color: #94a3b8;
                     border: 2px dashed #475569;
@@ -274,17 +368,6 @@ const UI = {
                     <div style="font-size: 48px; margin-bottom: 15px;">🃏</div>
                     <h3 style="color: #cbd5e1; margin-bottom: 10px;">У вас пока нет карт</h3>
                     <p style="margin-bottom: 20px;">Откройте свой первый пак, чтобы получить карты!</p>
-                    <div style="
-                        display: flex;
-                        justify-content: center;
-                        gap: 10px;
-                        color: #64748b;
-                        font-size: 12px;
-                    ">
-                        <div>🎲 Случайная карта</div>
-                        <div>⚡ Разные редкости</div>
-                        <div>💰 Продавайте на маркете</div>
-                    </div>
                 </div>
             `;
             return;
@@ -298,7 +381,14 @@ const UI = {
             ">
                 ${userData.cards.map(card => `
                     <div class="card-item ${card.rarity}" 
-                         style="border-color: ${Utils.getRarityColor(card.rarity)}">
+                         style="
+                            background: #1e293b;
+                            border-radius: 10px;
+                            padding: 12px;
+                            text-align: center;
+                            border: 2px solid ${Utils.getRarityColor(card.rarity)};
+                            transition: transform 0.3s;
+                         ">
                         ${Utils.createCardImage(card.cardId, 'card-image').outerHTML}
                         <div style="margin: 10px 0;">
                             <div style="font-weight: bold; font-size: 14px; margin-bottom: 5px;">
@@ -316,17 +406,19 @@ const UI = {
                                 ${card.rarity?.toUpperCase() || 'COMMON'}
                             </div>
                         </div>
-                        <div style="display: flex; gap: 8px; margin-top: 10px;">
-                            <button onclick="sellCard('${card.id}')" 
-                                    style="
-                                        flex: 1;
-                                        background: #22c55e;
-                                        padding: 8px;
-                                        font-size: 12px;
-                                    ">
-                                💰 Продать
-                            </button>
-                        </div>
+                        <button onclick="App.sellCard('${card.id}')" 
+                                style="
+                                    width: 100%;
+                                    background: #22c55e;
+                                    color: white;
+                                    border: none;
+                                    padding: 8px;
+                                    border-radius: 6px;
+                                    cursor: pointer;
+                                    font-size: 12px;
+                                ">
+                            💰 Продать
+                        </button>
                     </div>
                 `).join('')}
             </div>
@@ -337,7 +429,10 @@ const UI = {
     displayMarket() {
         const container = document.getElementById('market');
         
-        if (!marketListings || marketListings.length === 0) {
+        // Фильтруем свои лоты
+        const otherListings = marketListings.filter(listing => listing.sellerId !== userId);
+        
+        if (otherListings.length === 0) {
             container.innerHTML = `
                 <div style="
                     text-align: center;
@@ -349,29 +444,10 @@ const UI = {
                 ">
                     <div style="font-size: 48px; margin-bottom: 15px;">🏪</div>
                     <h3 style="color: #cbd5e1; margin-bottom: 10px;">Маркет пуст</h3>
-                    <p>Здесь будут появляться карты, которые выставляют на продажу другие игроки</p>
-            <p style="margin-top: 20px; font-size: 14px; color: #64748b;">
-                        Выставьте свою первую карту на продажу!
-                    </p>
-                </div>
-            `;
-            return;
-        }
-        
-        // Фильтруем свои лоты (не показываем свои карты на маркете для покупки)
-        const otherListings = marketListings.filter(listing => listing.sellerId !== userId);
-        
-        if (otherListings.length === 0) {
-            container.innerHTML = `
-                <div style="
-                    text-align: center;
-                    padding: 30px;
-                    background: #1e293b;
-                    border-radius: 10px;
-                    color: #94a3b8;
-                ">
-                    <div style="font-size: 36px; margin-bottom: 10px;">👥</div>
                     <p>Другие игроки еще не выставили карты на продажу</p>
+                    <p style="margin-top: 20px; font-size: 14px; color: #64748b;">
+                        Будьте первым - выставьте свою карту!
+                    </p>
                 </div>
             `;
             return;
@@ -379,13 +455,20 @@ const UI = {
         
         container.innerHTML = `
             <div style="
-                display: grid;
+display: grid;
                 grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
                 gap: 15px;
             ">
                 ${otherListings.map(listing => `
                     <div class="card-item ${listing.rarity}" 
-                         style="border-color: ${Utils.getRarityColor(listing.rarity)}">
+                         style="
+                            background: #1e293b;
+                            border-radius: 10px;
+                            padding: 12px;
+                            text-align: center;
+                            border: 2px solid ${Utils.getRarityColor(listing.rarity)};
+                            transition: transform 0.3s;
+                         ">
                         ${Utils.createCardImage(listing.cardId, 'card-image').outerHTML}
                         <div style="margin: 10px 0;">
                             <div style="font-weight: bold; font-size: 14px; margin-bottom: 5px;">
@@ -399,11 +482,11 @@ const UI = {
                                 padding: 3px 8px;
                                 border-radius: 20px;
                                 display: inline-block;
-                                margin-bottom: 8px;
+                                margin-bottom: 5px;
                             ">
                                 ${listing.rarity?.toUpperCase() || 'COMMON'}
                             </div>
-                            <div style="font-size: 12px; color: #94a3b8; margin-bottom: 5px;">
+                            <div style="font-size: 12px; color: #94a3b8;">
                                 Продавец: ${listing.sellerName || 'Игрок'}
                             </div>
                         </div>
@@ -422,14 +505,18 @@ const UI = {
                                 ${Utils.formatNumber(listing.price)} хериков
                             </div>
                         </div>
-                        <button onclick="buyMarketCard('${listing.id}')" 
+                        <button onclick="App.buyMarketCard('${listing.id}')" 
                                 style="
                                     width: 100%;
-                                    background: #6366f1;
+                                    background: ${userData.balance >= listing.price ? '#6366f1' : '#94a3b8'};
+                                    color: white;
+                                    border: none;
                                     padding: 10px;
+                                    border-radius: 6px;
+                                    cursor: ${userData.balance >= listing.price ? 'pointer' : 'not-allowed'};
                                 "
                                 ${userData.balance < listing.price ? 'disabled' : ''}>
-                            🛒 Купить
+                            ${userData.balance >= listing.price ? '🛒 Купить' : '❌ Недостаточно'}
                         </button>
                     </div>
                 `).join('')}
@@ -443,7 +530,7 @@ const Roulette = {
     async show() {
         const container = document.getElementById('rouletteContainer');
         const rouletteDiv = document.getElementById('roulette');
-     const resultText = document.getElementById('resultText');
+        const resultText = document.getElementById('resultText');
         const title = document.getElementById('rouletteTitle');
         const closeBtn = document.getElementById('closeRoulette');
         
@@ -501,7 +588,7 @@ const Roulette = {
                         
                         // Создаем карту-победителя
                         const wonCard = {
-                            id: 'card_' + Date.now() + '_' + Math.random(),
+                            id: 'card_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
                             cardId: winnerCardId,
                             rarity: winnerRarity,
                             name: `Карта #${winnerCardId}`,
@@ -534,11 +621,13 @@ const App = {
         // Загружаем данные пользователя
         const savedData = await API.loadUserData();
         if (savedData) {
-            userData = { ...userData, ...savedData };
+            userData = savedData;
+            console.log('📊 Данные пользователя:', userData);
         }
         
         // Загружаем маркет
         marketListings = await API.loadMarket();
+        console.log('🛒 Загружено лотов на маркете:', marketListings.length);
         
         // Обновляем интерфейс
         UI.updateProfile();
@@ -548,10 +637,18 @@ const App = {
         // Инициализируем кнопки
         this.initButtons();
         
-        // Сохраняем данные каждые 30 секунд
-     setInterval(() => {
-            API.saveUserData();
-        }, 30000);
+        // Сохраняем данные каждые 10 секунд
+        setInterval(async () => {
+            const saved = await API.saveUserData();
+            if (saved) {
+                console.log('💾 Автосохранение выполнено');
+            }
+        }, 10000);
+        
+        // Сохраняем при закрытии страницы
+        window.addEventListener('beforeunload', async () => {
+            await API.saveUserData();
+        });
         
         console.log('=== ПРИЛОЖЕНИЕ ЗАПУЩЕНО ===');
     },
@@ -561,7 +658,7 @@ const App = {
         // Кнопка фарма
         const farmBtn = document.getElementById('farmHeriks');
         if (farmBtn) {
-            farmBtn.addEventListener('click', (e) => {
+            farmBtn.addEventListener('click', async (e) => {
                 // Анимация
                 farmBtn.style.animation = 'bounce 0.3s';
                 setTimeout(() => farmBtn.style.animation = '', 300);
@@ -580,6 +677,9 @@ const App = {
                 userData.farmStats.totalClicks = (userData.farmStats.totalClicks || 0) + 1;
                 
                 UI.updateProfile();
+                
+                // Сохраняем
+                await API.saveUserData();
             });
         }
         
@@ -590,7 +690,7 @@ const App = {
                 if (isOpeningPack) return;
                 
                 if (userData.balance < CONFIG.PACK_COST) {
-                    alert(`❌ Недостаточно хериков! Нужно ${CONFIG.PACK_COST}, у вас ${userData.balance}`);
+                    Utils.showNotification(`❌ Недостаточно хериков! Нужно ${CONFIG.PACK_COST}`, 'error');
                     return;
                 }
                 
@@ -612,11 +712,14 @@ const App = {
                     UI.displayUserCards();
                     
                     // Сохраняем данные
-                    await API.saveUserData();
+                    const saved = await API.saveUserData();
+                    if (saved) {
+                        Utils.showNotification(`🎉 Получена ${wonCard.rarity} карта #${wonCard.cardId}!`, 'success');
+                    }
                     
                 } catch (error) {
                     console.error('Ошибка открытия пака:', error);
-                    alert('Ошибка при открытии пака');
+                    Utils.showNotification('❌ Ошибка при открытии пака', 'error');
                 } finally {
                     isOpeningPack = false;
                     openPackBtn.disabled = false;
@@ -632,114 +735,131 @@ const App = {
                 document.getElementById('rouletteContainer').style.display = 'none';
             });
         }
+    },
+    
+    // Продажа карты
+    async sellCard(cardId) {
+        const card = userData.cards.find(c => c.id === cardId);
+        if (!card) {
+            Utils.showNotification('❌ Карта не найдена!', 'error');
+            return;
+        }
+        
+        // Запрашиваем цену
+        const suggestedPrice = card.rarity === 'legendary' ? 1000 :
+                              card.rarity === 'epic' ? 500 :
+                              card.rarity === 'rare' ? 200 : 50;
+        
+        const priceInput = prompt(
+            `Введите цену продажи для ${card.
+rarity} карты #${card.cardId}:\n\n` +
+            `Минимум: ${CONFIG.MIN_SELL_PRICE} хериков\n` +
+            `Максимум: ${CONFIG.MAX_SELL_PRICE} хериков\n\n` +
+            `Рекомендуемая цена: ${suggestedPrice} хериков`,
+            suggestedPrice.toString()
+        );
+        
+        if (!priceInput) return;
+        
+        const price = parseInt(priceInput);
+        if (isNaN(price) || price < CONFIG.MIN_SELL_PRICE || price > CONFIG.MAX_SELL_PRICE) {
+            Utils.showNotification(
+                `❌ Цена должна быть от ${CONFIG.MIN_SELL_PRICE} до ${CONFIG.MAX_SELL_PRICE} хериков!`, 
+                'error'
+            );
+            return;
+        }
+        
+        if (!confirm(`Выставить карту #${card.cardId} на продажу за ${Utils.formatNumber(price)} хериков?`)) {
+            return;
+        }
+        
+        // Создаем лот на маркете через API
+        const listing = await API.createListing(card, price);
+        if (listing) {
+            // Удаляем карту у пользователя
+            userData.cards = userData.cards.filter(c => c.id !== cardId);
+            
+            // Обновляем интерфейс
+            UI.displayUserCards();
+            
+            // Добавляем лот в локальный список маркета
+            marketListings.push(listing);
+            UI.displayMarket();
+            
+            // Сохраняем данные пользователя
+            await API.saveUserData();
+            
+            Utils.showNotification(
+                `✅ Карта выставлена на маркет за ${Utils.formatNumber(price)} хериков!`, 
+                'success'
+            );
+        } else {
+            Utils.showNotification('❌ Не удалось создать лот на маркете', 'error');
+        }
+    },
+    
+    // Покупка карты с маркета
+    async buyMarketCard(listingId) {
+        const listing = marketListings.find(l => l.id === listingId);
+        if (!listing) {
+            Utils.showNotification('❌ Лот не найден!', 'error');
+            return;
+        }
+        
+        if (userData.balance < listing.price) {
+            Utils.showNotification(
+                `❌ Недостаточно хериков! Нужно ${listing.price}, у вас ${userData.balance}`, 
+                'error'
+            );
+            return;
+        }
+        
+        if (!confirm(`Купить карту #${listing.cardId} за ${Utils.formatNumber(listing.price)} хериков?`)) {
+            return;
+        }
+        
+        // Совершаем покупку через API
+        const result = await API.buyListing(listingId);
+        if (result && result.success) {
+            // Обновляем баланс
+            userData.balance -= listing.price;
+            
+            // Добавляем карту
+            userData.cards.push({
+                id: 'card_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+                cardId: listing.cardId,
+                rarity: listing.rarity,
+                name: `Карта #${listing.cardId}`,
+                ownerId: userId
+            });
+            
+            // Удаляем лот с маркета
+            marketListings = marketListings.filter(l => l.id !== listingId);
+            
+            // Обновляем интерфейс
+            UI.updateProfile();
+            UI.displayUserCards();
+            UI.displayMarket();
+            
+            // Сохраняем данные
+            await API.saveUserData();
+            
+            Utils.showNotification(
+                `🎉 Вы купили карту #${listing.cardId} за ${Utils.formatNumber(listing.price)} хериков!`, 
+                'success'
+            );
+        } else {
+            Utils.showNotification('❌ Не удалось купить карту. Возможно, её уже купили.', 'error');
+        }
     }
 };
-
-// ========== ГЛОБАЛЬНЫЕ ФУНКЦИИ ==========
-
-// Продажа карты
-async function sellCard(cardId) {
-    const card = userData.cards.find(c => c.id === cardId);
-    if (!card) {
-        alert('Карта не найдена!');
-        return;
-    }
-    
-    // Запрашиваем цену
-    const priceInput = prompt(
-        `Введите цену продажи для ${card.rarity} карты #${card.cardId}:\n(от ${CONFIG.MIN_SELL_PRICE} до ${CONFIG.MAX_SELL_PRICE} хериков)`,
-        card.rarity === 'legendary' ? '1000' :
-        card.rarity === 'epic' ? '500' :
-        card.rarity === 'rare' ? '200' : '50'
-    );
-    
-    if (!priceInput) return;
-    
-    const price = parseInt(priceInput);
-    if (isNaN(price) || price < CONFIG.MIN_SELL_PRICE || price > CONFIG.MAX_SELL_PRICE) {
-        alert(`Цена должна быть от ${CONFIG.MIN_SELL_PRICE} до ${CONFIG.MAX_SELL_PRICE} хериков!`);
-        return;
-    }
- if (!confirm(`Выставить карту #${card.cardId} на продажу за ${Utils.formatNumber(price)} хериков?`)) {
-        return;
-    }
-    
-    // Создаем лот на маркете
-    const listing = await API.createListing(card.cardId, price);
-    if (listing) {
-        // Удаляем карту у пользователя
-        userData.cards = userData.cards.filter(c => c.id !== cardId);
-        
-        // Обновляем интерфейс
-        UI.displayUserCards();
-        UI.updateProfile();
-        
-        // Обновляем маркет
-        marketListings.push({
-            id: listing.id,
-            cardId: card.cardId,
-            rarity: card.rarity,
-            price: price,
-            sellerId: userId,
-            sellerName: username
-        });
-        
-        UI.displayMarket();
-        
-        alert(`✅ Карта выставлена на маркет за ${Utils.formatNumber(price)} хериков!`);
-    } else {
-        alert('❌ Не удалось создать лот на маркете');
-    }
-}
-
-// Покупка карты с маркета
-async function buyMarketCard(listingId) {
-    const listing = marketListings.find(l => l.id === listingId);
-    if (!listing) {
-        alert('Лот не найден!');
-        return;
-    }
-    
-    if (userData.balance < listing.price) {
-        alert(`❌ Недостаточно хериков! Нужно ${listing.price}, у вас ${userData.balance}`);
-        return;
-    }
-    
-    if (!confirm(`Купить карту #${listing.cardId} за ${Utils.formatNumber(listing.price)} хериков?`)) {
-        return;
-    }
-    
-    // Совершаем покупку через API
-    const result = await API.buyListing(listingId);
-    if (result && result.success) {
-        // Обновляем баланс
-        userData.balance -= listing.price;
-        
-        // Добавляем карту
-        userData.cards.push({
-            id: 'card_' + Date.now() + '_' + Math.random(),
-            cardId: listing.cardId,
-            rarity: listing.rarity,
-            name: `Карта #${listing.cardId}`,
-            ownerId: userId
-        });
-        
-        // Удаляем лот с маркета
-        marketListings = marketListings.filter(l => l.id !== listingId);
-        
-        // Обновляем интерфейс
-        UI.updateProfile();
-        UI.displayUserCards();
-        UI.displayMarket();
-        
-        alert(`🎉 Вы купили карту #${listing.cardId} за ${Utils.formatNumber(listing.price)} хериков!`);
-    } else {
-        alert('❌ Не удалось купить карту. Возможно, её уже купили.');
-    }
-}
 
 // ========== ЗАПУСК ПРИЛОЖЕНИЯ ==========
 document.addEventListener('DOMContentLoaded', () => {
     console.log('=== DOM ЗАГРУЖЕН ===');
     App.init();
 });
+
+// Делаем App глобальным для вызова из HTML
+window.App = App;
