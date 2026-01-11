@@ -184,6 +184,14 @@ if (!document.querySelector('#app-styles')) {
             0% { transform: translateY(0) scale(1); opacity: 1; }
             100% { transform: translateY(-50px) scale(0.5); opacity: 0; }
         }
+        @keyframes rouletteHighlight {
+            0%, 100% { transform: scale(1); box-shadow: 0 0 0px #f59e0b; }
+            50% { transform: scale(1.1); box-shadow: 0 0 30px #f59e0b; }
+        }
+        @keyframes rouletteProgress {
+            from { width: 0%; }
+            to { width: 100%; }
+        }
         .coin-popup {
             position: fixed;
             background: #f59e0b;
@@ -203,13 +211,22 @@ if (!document.querySelector('#app-styles')) {
 async function loadUserData() {
     try {
         // Сначала пробуем сервер
-        const response = await fetch(`${CONFIG.BACKEND_URL}/api/user/${userId}`);
+        const response = await fetch(`${CONFIG.BACKEND_URL}/api/user/${userId}`, {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json',
+                'Cache-Control': 'no-cache'
+            }
+        });
+        
         if (response.ok) {
             const data = await response.json();
-            console.log('✅ Данные загружены с сервера');
+            console.log('✅ Данные загружены с сервера:', data);
             // Сохраняем локально для кэша
             localStorage.setItem(`user_${userId}`, JSON.stringify(data));
             return data;
+        } else {
+            console.log('⚠️ Сервер вернул ошибку:', response.status);
         }
     } catch (error) {
         console.log('⚠️ Не удалось загрузить с сервера:', error.message);
@@ -233,17 +250,25 @@ async function loadUserData() {
         balance: CONFIG.INITIAL_BALANCE,
         cards: [],
         farmStats: { totalClicks: 0 },
-        username: username
+        username: username,
+        createdAt: new Date().toISOString()
     };
 }
 
 async function loadMarket() {
     try {
-        const response = await fetch(`${CONFIG.BACKEND_URL}/api/market`);
+        const response = await fetch(`${CONFIG.BACKEND_URL}/api/market`, {
+            headers: {
+                'Cache-Control': 'no-cache'
+            }
+        });
+        
         if (response.ok) {
             const data = await response.json();
             console.log(`✅ Маркет загружен: ${data.length} лотов`);
             return data;
+        } else {
+            console.log('⚠️ Ошибка загрузки маркета:', response.status);
         }
     } catch (error) {
         console.log('⚠️ Не удалось загрузить маркет:', error.message);
@@ -257,18 +282,22 @@ async function saveUserData() {
         // Сохраняем локально
         localStorage.setItem(`user_${userId}`, JSON.stringify(userData));
         
-        // Пробуем сохранить на сервер (в фоне, не ждем ответа)
-        fetch(`${CONFIG.BACKEND_URL}/api/user/${userId}`, {
+        // Сохраняем на сервер (синхронно)
+        const response = await fetch(`${CONFIG.BACKEND_URL}/api/user/${userId}`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
             body: JSON.stringify(userData)
-        }).then(response => {
-            if (response.ok) {
-                console.log('✅ Данные сохранены на сервер');
-            }
-        }).catch(() => {
-            // Игнорируем ошибки сети
         });
+        
+        if (response.ok) {
+            const result = await response.json();
+            console.log('✅ Данные сохранены на сервер:', result);
+        } else {
+            console.log('⚠️ Ошибка сохранения на сервер:', response.status);
+        }
         
         return true;
     } catch (error) {
@@ -276,6 +305,184 @@ async function saveUserData() {
         return false;
     }
 }
+
+// ========== РУЛЕТКА (8 СЕКУНД АНИМАЦИЯ) ==========
+const Roulette = {
+    show() {
+        return new Promise((resolve) => {
+            const container = document.getElementById('rouletteContainer');
+            const rouletteDiv = document.getElementById('roulette');
+            const resultText = document.getElementById('resultText');
+            const title = document.getElementById('rouletteTitle');
+            const closeBtn = document.getElementById('closeRoulette');
+            
+            // Показываем контейнер
+            container.style.display = 'block';
+            title.textContent = '🎰 ОТКРЫТИЕ ПАКА';
+            resultText.innerHTML = '🎮 <b>ГОТОВИМ РУЛЕТКУ...</b>';
+            closeBtn.style.display = 'none';
+            
+            // Очищаем предыдущую рулетку
+            rouletteDiv.innerHTML = '';
+            
+            // Создаем прогресс-бар
+            const progressBar = document.createElement('div');
+            progressBar.style.cssText = `
+                width: 100%;
+                height: 5px;
+                background: #334155;
+                border-radius: 3px;
+                margin: 10px 0;
+                overflow: hidden;
+            `;
+            
+            const progressFill = document.createElement('div');
+            progressFill.style.cssText = `
+                width: 0%;
+                height: 100%;
+                background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+                border-radius: 3px;
+                transition: width 0.1s linear;
+            `;
+            
+            progressBar.appendChild(progressFill);
+            rouletteDiv.parentNode.insertBefore(progressBar, rouletteDiv.nextSibling);
+            
+            // Создаем трек для карточек
+            const track = document.createElement('div');
+            track.style.cssText = `
+                display: flex;
+                position: absolute;
+                height: 100%;
+                align-items: center;
+                will-change: transform;
+            `;
+            
+            // Добавляем 40 карточек для плавной анимации
+            const totalCards = 40;
+            for (let i = 0; i < totalCards; i++) {
+                const cardId = (i % 20) + 1; // 20 карт
+                const img = Utils.createCardImage(cardId, '160px', '190px');
+                img.style.margin = '0 15px';
+                img.style.width = '160px';
+                img.style.height = '190px';
+                img.style.borderRadius = '12px';
+                img.style.boxShadow = '0 5px 15px rgba(0,0,0,0.3)';
+                img.classList.add('roulette-card');
+                track.appendChild(img);
+            }
+            
+            rouletteDiv.appendChild(track);
+            
+            // Запускаем анимацию через 1 секунду
+            setTimeout(() => {
+                resultText.innerHTML = '🎡 <b>РУЛЕТКА ЗАПУЩЕНА!</b>';
+                
+                // Выбираем победителя
+                const winnerIndex = 25 + Math.floor(Math.random() * 10);
+                const winnerCardId = (winnerIndex % 20) + 1;
+                const rarities = ['common', 'common', 'rare', 'epic', 'legendary'];
+                const rarity = rarities[Math.floor(Math.random() * rarities.length)];
+                
+                // Рассчитываем позицию для остановки
+                const cardWidth = 160 + 30; // ширина карты + margin
+                const targetPosition = -(winnerIndex * cardWidth) + (rouletteDiv.offsetWidth / 2) - (cardWidth / 2);
+                
+                // Запускаем анимацию прогресс-бара
+                let progress = 0;
+                const progressInterval = setInterval(() => {
+                    progress += 1.25; // 100% за 8 секунд (8000ms / 100 = 80ms за 1%)
+                    progressFill.style.width = `${Math.min(100, progress)}%`;
+                }, 100); // Обновляем каждые 100ms
+                
+                // Запускаем анимацию рулетки
+                track.style.transition = 'transform 8s cubic-bezier(0.2, 0.8, 0.2, 1)';
+                track.style.transform = `translateX(${targetPosition}px)`;
+                
+                // Таймер обратного отсчета
+                let secondsLeft = 8;
+                const countdownInterval = setInterval(() => {
+                    secondsLeft--;
+                    if (secondsLeft > 0) {
+                        resultText.innerHTML = `⏳ <b>КРУТИМ... ${secondsLeft}С</b>`;
+                    }
+                }, 1000);
+                
+                // После 8 секунд показываем результат
+                setTimeout(() => {
+                    clearInterval(progressInterval);
+                    clearInterval(countdownInterval);
+                    
+                    // Подсвечиваем победившую карту
+                    const cards = track.querySelectorAll('.roulette-card');
+                    if (cards[winnerIndex]) {
+                        const winnerCard = cards[winnerIndex];
+                        winnerCard.style.border = '4px solid #f59e0b';
+                        winnerCard.style.boxShadow = '0 0 40px #f59e0b';
+                        winnerCard.style.animation = 'rouletteHighlight 0.8s infinite alternate';
+                        
+                        // Анимация прыжка
+                        winnerCard.style.transform = 'translateY(-20px)';
+                        setTimeout(() => {
+                            winnerCard.style.transform = 'translateY(0)';
+                            winnerCard.style.transition = 'transform 0.3s';
+                        }, 300);
+                    }
+                    
+                    // Создаем выигранную карту
+                    const wonCard = {
+                        id: Utils.generateCardId(),
+                        cardId: winnerCardId,
+                        rarity: rarity,
+                        name: `Карта #${winnerCardId}`,
+                        ownerId: userId,
+                        obtainedAt: new Date().toISOString()
+                    };
+                    
+                    // Показываем результат с эмодзи
+                    const rarityEmoji = {
+                        common: '⚪',
+                        rare: '🔵',
+                        epic: '🟣',
+                        legendary: '🟡'
+                    };
+                    
+                    resultText.innerHTML = `
+                        <div style="text-align: center;">
+                            <div style="font-size: 32px; margin: 10px 0;">🎉 🎊 🎉</div>
+                            <div style="font-size: 20px; color: #22c55e; margin: 10px 0;">
+                                <b>ВЫ ВЫИГРАЛИ!</b>
+                            </div>
+                            <div style="color: ${Utils.getRarityColor(rarity)}; 
+                                      font-size: 18px; 
+                                      font-weight: bold;
+                                      margin: 10px 0;
+                                      padding: 10px;
+                                      background: rgba(0,0,0,0.3);
+                                      border-radius: 10px;">
+                                ${rarityEmoji[rarity] || '🎴'} ${rarity.toUpperCase()} КАРТУ #${winnerCardId}
+                            </div>
+                        </div>
+                    `;
+                    
+                    title.textContent = '🏆 ПОБЕДА!';
+                    
+                    // Показываем кнопку закрытия
+                    closeBtn.style.display = 'inline-block';
+                    closeBtn.textContent = '🎴 ЗАБРАТЬ КАРТУ';
+                    
+                    resolve(wonCard);
+                    
+                }, 8000); // 8 секунд анимации
+                
+            }, 1000); // Задержка перед стартом
+        });
+    },
+    
+    close() {
+        document.getElementById('rouletteContainer').style.display = 'none';
+    }
+};
 
 // ========== ИНТЕРФЕЙС ==========
 const UI = {
@@ -355,6 +562,8 @@ const UI = {
             <div style="display: grid; grid-template-columns: ${gridColumns}; gap: ${isMobile ? '10px' : '15px'}; width: 100%;">
                 ${otherListings.slice(0, 20).map(listing => {
                     const canBuy = userData.balance >= listing.price;
+                    const isDemo = listing.isDemo;
+                    
                     return `
                     <div style="background: #1e293b; border-radius: 10px; padding: 12px; text-align: center; border: 2px solid ${Utils.getRarityColor(listing.rarity)};">
                         ${Utils.createCardImage(listing.cardId).outerHTML}
@@ -365,6 +574,7 @@ const UI = {
                             </div>
                             <div style="font-size: 12px; color: #94a3b8;">
                                 💁 @${listing.sellerName}
+                                ${isDemo ? ' <span style="color:#f59e0b">(демо)</span>' : ''}
                             </div>
                         </div>
                         <div style="background: rgba(34, 197, 94, 0.1); border-radius: 8px; padding: 10px; margin: 10px 0;">
@@ -438,13 +648,15 @@ async function sellCard(cardId) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'Accept': 'application/json'
             },
             body: JSON.stringify({
                 sellerId: userId,
                 sellerName: username,
                 cardId: card.cardId,
                 rarity: card.rarity,
-                price: price
+                price: price,
+                originalCardId: card.id
             })
         });
         
@@ -454,7 +666,7 @@ async function sellCard(cardId) {
             const result = await response.json();
             console.log('Ответ сервера:', result);
             
-            if (result.success) {
+            if (result.success && result.listing) {
                 // Удаляем карту у пользователя
                 userData.cards = userData.cards.filter(c => c.id !== cardId);
                 
@@ -464,15 +676,11 @@ async function sellCard(cardId) {
                 // Обновляем интерфейс
                 UI.displayUserCards();
                 
-                // Обновляем маркет через 1 секунду
+                // Немедленно обновляем маркет
                 setTimeout(async () => {
-                    try {
-                        marketListings = await loadMarket();
-                        UI.displayMarket();
-                    } catch (error) {
-                        console.log('Не удалось обновить маркет:', error);
-                    }
-                }, 1000);
+                    marketListings = await loadMarket();
+                    UI.displayMarket();
+                }, 500);
                 
                 Utils.showNotification(`✅ Карта выставлена за ${Utils.formatNumber(price)} хериков!`, 'success');
                 return;
@@ -506,7 +714,8 @@ async function sellCard(cardId) {
             rarity: card.rarity,
             price: price,
             isDemo: false,
-            createdAt: new Date().toISOString()
+            createdAt: new Date().toISOString(),
+            originalCardId: card.id
         };
         
         // Удаляем карту
@@ -522,7 +731,30 @@ async function sellCard(cardId) {
         UI.displayUserCards();
         UI.displayMarket();
         
-        Utils.showNotification(`✅ Карта выставлена локально за ${Utils.formatNumber(price)} хериков!`, 'success');
+        // Пробуем отправить на сервер в фоне
+        setTimeout(async () => {
+            try {
+                const response = await fetch(`${CONFIG.BACKEND_URL}/api/market/list`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        sellerId: userId,
+                        sellerName: username,
+                        cardId: card.cardId,
+                        rarity: card.rarity,
+                        price: price
+                    })
+                });
+                
+                if (response.ok) {
+                    console.log('✅ Лот отправлен на сервер в фоне');
+                }
+            } catch (e) {
+                // Игнорируем ошибки фоновой отправки
+            }
+        }, 100);
+        
+        Utils.showNotification(`✅ Карта выставлена за ${Utils.formatNumber(price)} хериков!`, 'success');
     }
 }
 
@@ -558,6 +790,7 @@ async function buyMarketCard(listingId) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 buyerId: userId,
+                buyerName: username,
                 listingId: listingId
             })
         });
@@ -579,15 +812,11 @@ async function buyMarketCard(listingId) {
                 UI.updateProfile();
                 UI.displayUserCards();
                 
-                // Обновляем маркет через 1 секунду
+                // Немедленно обновляем маркет
                 setTimeout(async () => {
-                    try {
-                        marketListings = await loadMarket();
-                        UI.displayMarket();
-                    } catch (error) {
-                        console.log('Не удалось обновить маркет:', error);
-                    }
-                }, 1000);
+                    marketListings = await loadMarket();
+                    UI.displayMarket();
+                }, 500);
                 
                 Utils.showNotification(`🎉 Вы купили карту #${listing.cardId}!`, 'success');
                 return;
@@ -614,7 +843,8 @@ async function buyMarketCard(listingId) {
             rarity: listing.rarity,
             name: `Карта #${listing.cardId}`,
             purchasedAt: new Date().toISOString(),
-            purchasedFrom: listing.sellerId
+            purchasedFrom: listing.sellerId,
+            purchasePrice: listing.price
         };
         
         // Добавляем карту
@@ -631,7 +861,7 @@ async function buyMarketCard(listingId) {
         UI.displayUserCards();
         UI.displayMarket();
         
-        Utils.showNotification(`🎉 Вы купили карту #${listing.cardId} локально!`, 'success');
+        Utils.showNotification(`🎉 Вы купили карту #${listing.cardId}!`, 'success');
     }
 }
 
@@ -660,7 +890,7 @@ function initFarmButton() {
             // Обновляем интерфейс
             UI.updateProfile();
             
-            // Фоновое сохранение
+            // Сохраняем данные
             setTimeout(async () => {
                 await saveUserData();
             }, 100);
@@ -682,75 +912,24 @@ function initOpenPackButton() {
             isOpeningPack = true;
             openPackBtn.disabled = true;
             const originalText = openPackBtn.textContent;
-            openPackBtn.textContent = '⏳ ОТКРЫВАЕМ...';
+            openPackBtn.textContent = '⏳ ПОДГОТОВКА...';
             
             try {
                 // Списываем стоимость
                 userData.balance -= CONFIG.PACK_COST;
                 UI.updateProfile();
                 
-                // Показываем рулетку
-                const container = document.getElementById('rouletteContainer');
-                const resultText = document.getElementById('resultText');
-                const title = document.getElementById('rouletteTitle');
-                const closeBtn = document.getElementById('closeRoulette');
+                // Показываем рулетку на 8 секунд
+                const wonCard = await Roulette.show();
                 
-                container.style.display = 'block';
-                title.textContent = '🎰 ОТКРЫТИЕ ПАКА';
-                resultText.innerHTML = '🎮 <b>ОТКРЫВАЕМ ПАК...</b>';
-                closeBtn.style.display = 'none';
+                // Добавляем карту
+                userData.cards.push(wonCard);
                 
-                // Ждем 2 секунды для анимации
-                setTimeout(async () => {
-                    // Генерируем случайную карту
-                    const cardId = Math.floor(Math.random() * 20) + 1;
-                    const rarities = ['common', 'common', 'rare', 'epic', 'legendary'];
-                    const rarity = rarities[Math.floor(Math.random() * rarities.length)];
-                    
-                    // Создаем карту
-                    const newCard = {
-                        id: Utils.generateCardId(),
-                        cardId: cardId,
-                        rarity: rarity,
-                        name: `Карта #${cardId}`,
-                        obtainedAt: new Date().toISOString()
-                    };
-                    
-                    // Добавляем карту
-                    userData.cards.push(newCard);
-                    
-                    // Сохраняем
-                    await saveUserData();
-                    
-                    // Показываем результат
-                    const rarityEmoji = {
-                        common: '⚪',
-                        rare: '🔵',
-                        epic: '🟣',
-                        legendary: '🟡'
-                    };
-                    
-                    resultText.innerHTML = `
-                        <div style="text-align: center;">
-                            <div style="font-size: 32px; margin: 10px 0;">🎉</div>
-                            <div style="font-size: 20px; color: #22c55e; margin: 10px 0;">
-                                <b>ВЫ ВЫИГРАЛИ!</b>
-                            </div>
-                            <div style="color: ${Utils.getRarityColor(rarity)}; font-size: 18px; font-weight: bold; margin: 10px 0; padding: 10px; background: rgba(0,0,0,0.3); border-radius: 10px;">
-                                ${rarityEmoji[rarity] || '🎴'} ${rarity.toUpperCase()} КАРТУ #${cardId}
-                            </div>
-                        </div>
-                    `;
-                    
-                    title.textContent = '🏆 ПОБЕДА!';
-                    closeBtn.style.display = 'inline-block';
-                    closeBtn.textContent = '🎴 ЗАБРАТЬ КАРТУ';
-                    closeBtn.onclick = function() {
-                        container.style.display = 'none';
-                        UI.displayUserCards();
-                    };
-                    
-                }, 2000);
+                // Сохраняем данные
+                await saveUserData();
+                
+                // Обновляем интерфейс
+                UI.displayUserCards();
                 
             } catch (error) {
                 console.error('Ошибка открытия пака:', error);
@@ -764,6 +943,15 @@ function initOpenPackButton() {
     }
 }
 
+function initCloseRouletteButton() {
+    const closeRouletteBtn = document.getElementById('closeRoulette');
+    if (closeRouletteBtn) {
+        closeRouletteBtn.addEventListener('click', () => {
+            Roulette.close();
+        });
+    }
+}
+
 // ========== ЗАГРУЗКА ПРИЛОЖЕНИЯ ==========
 async function initApp() {
     console.log('=== ЗАГРУЗКА ПРИЛОЖЕНИЯ ===');
@@ -772,6 +960,8 @@ async function initApp() {
         // Загружаем данные пользователя
         userData = await loadUserData();
         console.log('✅ Данные пользователя загружены');
+        console.log('- Баланс:', userData.balance);
+        console.log('- Карт:', userData.cards.length);
         
         // Загружаем маркет
         marketListings = await loadMarket();
@@ -785,8 +975,9 @@ async function initApp() {
         // Инициализируем кнопки
         initFarmButton();
         initOpenPackButton();
+        initCloseRouletteButton();
         
-        // Запускаем автообновление маркета каждые 10 секунд
+        // Запускаем автообновление маркета каждые 5 секунд
         setInterval(async () => {
             try {
                 const newMarket = await loadMarket();
@@ -798,13 +989,13 @@ async function initApp() {
             } catch (error) {
                 console.log('⚠️ Ошибка обновления маркета:', error);
             }
-        }, 10000);
+        }, 5000);
         
         console.log('=== ПРИЛОЖЕНИЕ УСПЕШНО ЗАГРУЖЕНО ===');
         
         // Показываем приветствие
         setTimeout(() => {
-            Utils.showNotification(`👋 Привет, @${username}!`, 'success');
+            Utils.showNotification(`👋 Добро пожаловать, @${username}!`, 'success');
         }, 1000);
         
     } catch (error) {
@@ -825,8 +1016,9 @@ async function initApp() {
         
         initFarmButton();
         initOpenPackButton();
+        initCloseRouletteButton();
         
-        Utils.showNotification(`👋 Привет, @${username}!`, 'success');
+        Utils.showNotification(`👋 Добро пожаловать, @${username}!`, 'success');
     }
 }
 
