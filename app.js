@@ -144,6 +144,216 @@ const Utils = {
             notification.style.animation = 'slideOut 0.3s ease';
             setTimeout(() => notification.remove(), 300);
         }, 3000);
+    },
+    
+    async showRouletteAnimation(cardId, rarity) {
+        return new Promise((resolve) => {
+            // Создаем оверлей для анимации
+            const overlay = document.createElement('div');
+            overlay.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.9);
+                z-index: 9999;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+                color: white;
+                font-family: Arial, sans-serif;
+            `;
+            
+            // Заголовок
+            const title = document.createElement('div');
+            title.style.cssText = `
+                font-size: 28px;
+                font-weight: bold;
+                margin-bottom: 30px;
+                text-align: center;
+                color: #fbbf24;
+                text-shadow: 0 0 10px rgba(251, 191, 36, 0.5);
+                animation: pulse 1s infinite alternate;
+            `;
+            title.textContent = '🎴 ОТКРЫТИЕ ПАКА 🎴';
+            
+            // Контейнер для рулетки
+            const rouletteContainer = document.createElement('div');
+            rouletteContainer.style.cssText = `
+                width: ${isMobile ? '90%' : '70%'};
+                max-width: 800px;
+                height: 200px;
+                background: #1e293b;
+                border-radius: 15px;
+                border: 3px solid #475569;
+                overflow: hidden;
+                position: relative;
+                margin-bottom: 30px;
+            `;
+            
+            // Лента карт для рулетки
+            const rouletteTrack = document.createElement('div');
+            rouletteTrack.style.cssText = `
+                display: flex;
+                position: absolute;
+                left: 0;
+                top: 20px;
+                height: 160px;
+                transition: transform 8s cubic-bezier(0.1, 0.7, 0.1, 1);
+            `;
+            
+            // Создаем много карт для анимации (50 карт)
+            for (let i = 0; i < 50; i++) {
+                const randomCardId = Math.floor(Math.random() * 20) + 1;
+                const randomRarities = ['common', 'common', 'rare', 'rare', 'epic', 'legendary'];
+                const randomRarity = randomRarities[Math.floor(Math.random() * randomRarities.length)];
+                
+                const cardElement = document.createElement('div');
+                cardElement.style.cssText = `
+                    width: 140px;
+                    height: 160px;
+                    margin: 0 5px;
+                    background: linear-gradient(135deg, #334155, #1e293b);
+                    border-radius: 10px;
+                    border: 2px solid ${this.getRarityColor(randomRarity)};
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;
+                    align-items: center;
+                    padding: 10px;
+                    box-sizing: border-box;
+                `;
+                
+                const cardImg = this.createCardImage(randomCardId, '100px', '100px');
+                const cardLabel = document.createElement('div');
+                cardLabel.style.cssText = `
+                    margin-top: 5px;
+                    font-size: 12px;
+                    color: ${this.getRarityColor(randomRarity)};
+                    font-weight: bold;
+                `;
+                cardLabel.textContent = randomRarity.toUpperCase();
+                
+                cardElement.appendChild(cardImg);
+                cardElement.appendChild(cardLabel);
+                rouletteTrack.appendChild(cardElement);
+            }
+            
+            // Таймер
+            const timer = document.createElement('div');
+            timer.style.cssText = `
+                font-size: 20px;
+                font-weight: bold;
+                margin-bottom: 20px;
+                color: #60a5fa;
+            `;
+            
+            // Результат
+            const result = document.createElement('div');
+            result.style.cssText = `
+                font-size: 24px;
+                font-weight: bold;
+                margin-top: 20px;
+                text-align: center;
+                opacity: 0;
+                transition: opacity 1s;
+                color: ${this.getRarityColor(rarity)};
+            `;
+            
+            rouletteContainer.appendChild(rouletteTrack);
+            overlay.appendChild(title);
+            overlay.appendChild(timer);
+            overlay.appendChild(rouletteContainer);
+            overlay.appendChild(result);
+            document.body.appendChild(overlay);
+            
+            // Добавляем стили для анимации
+            const style = document.createElement('style');
+            style.textContent = `
+                @keyframes pulse {
+                    from { transform: scale(1); }
+                    to { transform: scale(1.05); }
+                }
+                @keyframes glow {
+                    0% { box-shadow: 0 0 10px ${this.getRarityColor(rarity)}; }
+                    50% { box-shadow: 0 0 30px ${this.getRarityColor(rarity)}; }
+                    100% { box-shadow: 0 0 10px ${this.getRarityColor(rarity)}; }
+                }
+                @keyframes cardReveal {
+                    0% { transform: scale(0.5); opacity: 0; }
+                    100% { transform: scale(1); opacity: 1; }
+                }
+            `;
+            document.head.appendChild(style);
+            
+            // Рассчитываем позицию для остановки (последняя карта должна быть выигрышной)
+            const finalPosition = -((50 - 5) * 150); // Останавливаемся на 5-й с конца карте
+            
+            let timeLeft = 8;
+            const interval = setInterval(() => {
+                timeLeft--;
+                timer.textContent = `⏱️ ${timeLeft}`;
+                
+                if (timeLeft <= 0) {
+                    clearInterval(interval);
+                    
+                    // Показываем результат
+                    result.innerHTML = `
+                        🎉 ВЫ ВЫИГРАЛИ! 🎉<br>
+                        <div style="font-size: 20px; margin-top: 10px;">
+                            ${rarity.toUpperCase()} КАРТА #${cardId}
+                        </div>
+                    `;
+                    result.style.opacity = '1';
+                    
+                    // Анимация завершена
+                    setTimeout(() => {
+                        overlay.remove();
+                        style.remove();
+                        resolve();
+                    }, 2000);
+                }
+            }, 1000);
+            
+            // Запускаем анимацию рулетки
+            setTimeout(() => {
+                rouletteTrack.style.transform = `translateX(${finalPosition}px)`;
+            }, 100);
+            
+            // Быстрая анимация в начале
+            setTimeout(() => {
+                timer.textContent = '⏱️ 7';
+                title.textContent = '🎰 КРУТИТСЯ РУЛЕТКА... 🎰';
+            }, 1000);
+            
+            setTimeout(() => {
+                timer.textContent = '⏱️ 6';
+            }, 2000);
+            
+            setTimeout(() => {
+                timer.textContent = '⏱️ 5';
+            }, 3000);
+            
+            setTimeout(() => {
+                timer.textContent = '⏱️ 4';
+                title.textContent = '🌀 ЗАМЕДЛЕНИЕ... 🌀';
+            }, 4000);
+            
+            setTimeout(() => {
+                timer.textContent = '⏱️ 3';
+            }, 5000);
+            
+            setTimeout(() => {
+                timer.textContent = '⏱️ 2';
+            }, 6000);
+            
+            setTimeout(() => {
+                timer.textContent = '⏱️ 1';
+                title.textContent = '🎯 ОСТАНОВКА... 🎯';
+            }, 7000);
+        });
     }
 };
 
@@ -157,8 +367,10 @@ async function loadUserData() {
         
         if (response.ok) {
             const data = await response.json();
-            console.log('✅ Данные пользователя загружены:', data.user);
-            return data.user || data;
+            console.log('✅ Данные пользователя загружены');
+            return data;
+        } else {
+            console.log('❌ Ошибка загрузки пользователя:', response.status);
         }
     } catch (error) {
         console.log('⚠️ Ошибка загрузки пользователя:', error);
@@ -180,8 +392,10 @@ async function loadMarket() {
         
         if (response.ok) {
             const data = await response.json();
-            console.log(`✅ Маркет загружен: ${data.length} карт`);
+            console.log(`✅ Маркет загружен: ${Array.isArray(data) ? data.length : 'не массив'}`);
             return Array.isArray(data) ? data : [];
+        } else {
+            console.log('❌ Ошибка загрузки маркета:', response.status);
         }
     } catch (error) {
         console.log('⚠️ Ошибка загрузки маркета:', error);
@@ -195,11 +409,20 @@ async function saveUserData() {
     try {
         const response = await fetch(`${CONFIG.BACKEND_URL}/api/user/${userId}`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
             body: JSON.stringify(userData)
         });
         
-        return response.ok;
+        if (response.ok) {
+            return true;
+        } else {
+            const errorText = await response.text();
+            console.log('❌ Ошибка сохранения:', response.status, errorText);
+            return false;
+        }
     } catch (error) {
         console.log('⚠️ Ошибка сохранения:', error);
         return false;
@@ -267,7 +490,10 @@ async function sellCard(cardId) {
         // ВАЖНО: Отправляем карту на сервер в общий маркет
         const response = await fetch(`${CONFIG.BACKEND_URL}/api/market/list`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
             body: JSON.stringify({
                 sellerId: userId,
                 sellerName: username,
@@ -278,7 +504,13 @@ async function sellCard(cardId) {
             })
         });
         
-        const result = await response.json();
+        let result;
+        try {
+            result = await response.json();
+        } catch (e) {
+            console.log('❌ Ошибка парсинга ответа:', e);
+            throw new Error('Неверный ответ от сервера');
+        }
         
         if (result.success) {
             // УДАЛЯЕМ КАРТУ У ПОЛЬЗОВАТЕЛЯ (она теперь на маркете)
@@ -346,7 +578,10 @@ async function buyMarketCard(listingId) {
         // Отправляем запрос на покупку
         const response = await fetch(`${CONFIG.BACKEND_URL}/api/market/buy`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
             body: JSON.stringify({
                 listingId: listingId,
                 buyerId: userId,
@@ -354,14 +589,22 @@ async function buyMarketCard(listingId) {
             })
         });
         
-        const result = await response.json();
+        let result;
+        try {
+            result = await response.json();
+        } catch (e) {
+            console.log('❌ Ошибка парсинга ответа:', e);
+            throw new Error('Неверный ответ от сервера');
+        }
         
         if (result.success) {
             // ОБНОВЛЯЕМ БАЛАНС
             userData.balance -= listing.price;
             
             // ДОБАВЛЯЕМ КАРТУ ПОЛЬЗОВАТЕЛЮ
-            userData.cards.push(result.purchase.card);
+            if (result.purchase && result.purchase.card) {
+                userData.cards.push(result.purchase.card);
+            }
             
             // Сохраняем данные
             await saveUserData();
@@ -377,7 +620,7 @@ async function buyMarketCard(listingId) {
             }, 500);
             
             Utils.showNotification(`🎉 Вы купили карту #${listing.cardId}!`, 'success');
-            console.log('💰 Покупка успешна:', result.purchase.card);
+            console.log('💰 Покупка успешна:', result);
         } else {
             throw new Error(result.error || 'Ошибка покупки');
         }
@@ -459,18 +702,21 @@ const UI = {
         
         console.log('🔍 Проверяем маркет:', {
             всегоКарт: marketListings.length,
-            карты: marketListings.map(l => ({ 
+            карты: marketListings.slice(0, 3).map(l => ({ 
                 id: l.id, 
                 sellerId: l.sellerId, 
                 status: l.status,
-                sold: l.sold 
+                sold: l.sold,
+                cardId: l.cardId
             }))
         });
         
         // Фильтруем: не показываем свои карты и проданные
-        const otherListings = marketListings.filter(listing => 
-            listing.sellerId !== userId && listing.status === 'active' && !listing.sold
-        );
+        const otherListings = marketListings.filter(listing => {
+            const isActive = (listing.status === 'active' && !listing.sold) || 
+                            (!listing.status && !listing.sold);
+            return listing.sellerId !== userId && isActive;
+        });
         
         console.log('✅ После фильтрации:', otherListings.length, 'карт');
         
@@ -484,15 +730,17 @@ const UI = {
                         🔄 Обновить маркет
                     </button>
                     <div style="margin-top: 20px; font-size: 14px; color: #64748b;">
-                        <p>💡 Совет: Откройте два окна браузера:</p>
-                        <p>1. В первом продайте карту</p>
-                        <p>2. Во втором она появится здесь!</p>
+                        <p>💡 Чтобы проверить маркет:</p>
+                        <p>1. Откройте два окна браузера</p>
+                        <p>2. В первом продайте карту</p>
+                        <p>3. Во втором она появится здесь!</p>
                     </div>
                     <div style="margin-top: 15px; padding: 10px; background: #0f172a; border-radius: 8px;">
-                        <div style="color: #cbd5e1; font-weight: bold; margin-bottom: 5px;">Демо-карты:</div>
+                        <div style="color: #cbd5e1; font-weight: bold; margin-bottom: 5px;">Статус сервера:</div>
                         <div style="font-size: 12px; color: #94a3b8;">
-                            Чтобы добавить тестовые карты, отправьте запрос на:<br>
-                            <code>POST ${CONFIG.BACKEND_URL}/api/market/add-demo</code>
+                            <button onclick="checkServerStatus()" style="background: #8b5cf6; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; margin-top: 5px;">
+                                Проверить соединение
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -585,16 +833,20 @@ function initFarmButton() {
     }
 }
 
-// Открытие пака
+// Открытие пака с анимацией
 async function openPack() {
     if (userData.balance < CONFIG.PACK_COST) {
         Utils.showNotification(`❌ Недостаточно хериков! Нужно: ${CONFIG.PACK_COST}`, 'error');
         return;
     }
     
-    Utils.showNotification('🎴 Открываем пак...', 'info');
+    // Проверяем баланс еще раз
+    if (userData.balance < CONFIG.PACK_COST) {
+        Utils.showNotification('❌ Недостаточно хериков!', 'error');
+        return;
+    }
     
-    // Списываем стоимость
+    // Сразу списываем стоимость, чтобы предотвратить двойное открытие
     userData.balance -= CONFIG.PACK_COST;
     UI.updateProfile();
     
@@ -603,6 +855,10 @@ async function openPack() {
     const rarities = ['common', 'common', 'rare', 'rare', 'epic', 'legendary'];
     const rarity = rarities[Math.floor(Math.random() * rarities.length)];
     
+    // Показываем анимацию рулетки
+    await Utils.showRouletteAnimation(cardId, rarity);
+    
+    // Создаем новую карту
     const newCard = {
         id: `card_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         cardId: cardId,
@@ -624,6 +880,28 @@ async function openPack() {
     Utils.showNotification(`🎉 Вы получили ${rarity} карту #${cardId}!`, 'success');
 }
 
+// Проверка статуса сервера
+async function checkServerStatus() {
+    try {
+        Utils.showNotification('🔄 Проверяем соединение с сервером...', 'info');
+        
+        const response = await fetch(`${CONFIG.BACKEND_URL}/api/test`);
+        if (response.ok) {
+            const data = await response.json();
+            Utils.showNotification(`✅ Сервер работает: ${data.message}`, 'success');
+            
+            // Перезагружаем маркет
+            marketListings = await loadMarket();
+            UI.displayMarket();
+        } else {
+            Utils.showNotification('❌ Сервер не отвечает', 'error');
+        }
+    } catch (error) {
+        Utils.showNotification('❌ Не удалось подключиться к серверу', 'error');
+        console.error('Ошибка подключения:', error);
+    }
+}
+
 // ========== ИНИЦИАЛИЗАЦИЯ ПРИЛОЖЕНИЯ ==========
 async function initApp() {
     console.log('=== ИНИЦИАЛИЗАЦИЯ ПРИЛОЖЕНИЯ ===');
@@ -633,11 +911,17 @@ async function initApp() {
         // Проверьте доступность сервера
         try {
             const test = await fetch(`${CONFIG.BACKEND_URL}/api/test`);
-            const testData = await test.json();
-            console.log('✅ Сервер доступен:', testData);
+            if (test.ok) {
+                const testData = await test.json();
+                console.log('✅ Сервер доступен:', testData);
+                Utils.showNotification('✅ Подключено к серверу маркета', 'success');
+            } else {
+                console.error('❌ Сервер недоступен:', test.status);
+                Utils.showNotification('⚠️ Сервер недоступен. Работаем в оффлайн-режиме', 'warning');
+            }
         } catch (error) {
             console.error('❌ Сервер недоступен:', error);
-            Utils.showNotification('⚠️ Сервер недоступен. Проверьте подключение.', 'error');
+            Utils.showNotification('⚠️ Сервер недоступен. Проверьте подключение.', 'warning');
         }
         
         // Загружаем данные пользователя
@@ -693,6 +977,7 @@ async function initApp() {
 window.sellCard = sellCard;
 window.buyMarketCard = buyMarketCard;
 window.openPack = openPack;
+window.checkServerStatus = checkServerStatus;
 
 // Запускаем приложение
 if (document.readyState === 'loading') {

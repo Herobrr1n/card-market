@@ -49,13 +49,14 @@ app.get('/api/market', (req, res) => {
     console.log('📊 [MARKET] Запрос маркета. Всего карт:', globalMarketListings.length);
     
     // Фильтруем только активные лоты
-    const activeListings = globalMarketListings.filter(listing => !listing.sold && listing.status === 'active');
+    const activeListings = globalMarketListings.filter(listing => !listing.sold && listing.status !== 'sold');
     
     // Сортируем по дате (новые сверху)
     const sortedListings = activeListings.sort((a, b) => 
         new Date(b.createdAt) - new Date(a.createdAt)
     );
     
+    console.log('📊 [MARKET] Отправляем активных карт:', sortedListings.length);
     res.json(sortedListings);
 });
 
@@ -91,7 +92,7 @@ app.post('/api/market/list', (req, res) => {
     // ВАЖНО: Добавляем в ГЛОБАЛЬНЫЙ маркет (видят все пользователи)
     globalMarketListings.unshift(newListing);
     
-    console.log('✅ [MARKET] Карта добавлена в общий маркет:', newListing);
+    console.log('✅ [MARKET] Карта добавлена в общий маркет:', newListing.id);
     console.log('📈 [MARKET] Всего карт на маркете:', globalMarketListings.length);
     
     // Возвращаем успешный ответ
@@ -197,6 +198,24 @@ app.post('/api/market/buy', (req, res) => {
     });
 });
 
+// GET /api/market/check/:listingId - ПРОВЕРИТЬ СТАТУС ЛОТА
+app.get('/api/market/check/:listingId', (req, res) => {
+    const listingId = req.params.listingId;
+    const listing = globalMarketListings.find(l => l.id === listingId);
+    
+    if (!listing) {
+        return res.status(404).json({ error: 'Лот не найден' });
+    }
+    
+    res.json({
+        id: listing.id,
+        sold: listing.sold,
+        status: listing.status,
+        price: listing.price,
+        sellerId: listing.sellerId
+    });
+});
+
 // ========== API ПОЛЬЗОВАТЕЛЯ ==========
 
 // GET /api/user/:id - ПОЛУЧИТЬ ДАННЫЕ ПОЛЬЗОВАТЕЛЯ
@@ -205,6 +224,7 @@ app.get('/api/user/:id', (req, res) => {
     console.log('👤 [USER] Запрос пользователя:', userId);
     
     if (users[userId]) {
+        console.log('👤 [USER] Пользователь найден');
         res.json(users[userId]);
     } else {
         // Создаем нового пользователя
@@ -268,7 +288,8 @@ app.get('/api/stats', (req, res) => {
         market: {
             totalListings: globalMarketListings.length,
             activeListings: activeListings.length,
-            soldListings: soldListings.length
+            soldListings: soldListings.length,
+            allListings: globalMarketListings
         },
         users: {
             totalUsers: Object.keys(users).length
